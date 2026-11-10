@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PacknPub — one command to a production-grade release pipeline</title>
+<meta name="description" content="Add CI, trusted npm publishing, GitHub Releases, GitHub Packages and a Homebrew formula to any Node package with one command.">
+<meta property="og:title" content="PacknPub">
+<meta property="og:description" content="Add a production-grade release pipeline to any Node package with one command.">
+<style>
+  :root {
+    --bg: #faf9f7; --ink: #1c1917; --muted: #6f6862; --line: #e7e2db;
+    --accent: #b45309; --code-bg: #f1efe9; --code-ink: #292524;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14110d; --ink: #ece9e4; --muted: #a49d93; --line: #2c2822;
+      --accent: #f5a623; --code-bg: #1d1915; --code-ink: #ece9e4;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 680px; margin: 0 auto; padding: 72px 24px 96px; }
+  .chip {
+    display: inline-block; font-size: 13px; color: var(--accent);
+    border: 1px solid var(--line); border-radius: 999px; padding: 3px 12px; letter-spacing: .02em;
+  }
+  h1 {
+    font-size: clamp(2.4rem, 6vw, 3.4rem); line-height: 1.05; letter-spacing: -0.02em;
+    font-weight: 800; margin: 20px 0 14px;
+  }
+  h1 span { color: var(--accent); }
+  .tagline { font-size: 1.3rem; color: var(--muted); max-width: 36ch; margin-bottom: 40px; }
+  .term {
+    background: var(--code-bg); color: var(--code-ink); border: 1px solid var(--line);
+    border-radius: 10px; padding: 14px 18px; margin-bottom: 10px;
+    font: 15px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    overflow-x: auto; white-space: pre;
+  }
+  .term .p { color: var(--accent); }
+  .hint { font-size: 13.5px; color: var(--muted); margin-bottom: 56px; }
+  h2 {
+    font-size: 1rem; text-transform: uppercase; letter-spacing: .08em;
+    color: var(--muted); margin: 0 0 14px;
+  }
+  section + section { margin-top: 48px; }
+  ul { list-style: none; padding: 0; }
+  li { padding: 13px 0; border-top: 1px solid var(--line); display: flex; gap: 18px; align-items: baseline; }
+  li:last-child { border-bottom: 1px solid var(--line); }
+  .file {
+    font: 14px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: var(--accent); flex: 0 0 15.5em;
+  }
+  li p { color: var(--muted); font-size: 15px; }
+  .cmd { padding: 16px 0; border-top: 1px solid var(--line); }
+  .cmd:last-child { border-bottom: 1px solid var(--line); }
+  .cmd code {
+    font: 15px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--ink);
+  }
+  .cmd code b { color: var(--accent); font-weight: 600; }
+  .cmd p { color: var(--muted); font-size: 15px; margin-top: 4px; }
+  footer { margin-top: 64px; padding-top: 20px; border-top: 1px solid var(--line);
+    display: flex; gap: 20px; flex-wrap: wrap; font-size: 14.5px; }
+  footer a { color: var(--accent); text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+  footer span { color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <span class="chip">v0.1.0 &middot; MIT</span>
+  <h1>Pack<span>n</span>Pub</h1>
+  <p class="tagline">Add a production-grade release pipeline to any Node package with one command.</p>
+
+  <div class="term"><span class="p">$</span> npx packnpub init</div>
+  <p class="hint">Or with Homebrew: <code>brew install RemyLoveLogicAI/tap/packnpub</code></p>
+
+  <section>
+    <h2>What init adds</h2>
+    <ul>
+      <li><span class="file">.github/workflows/ci.yml</span><p>Lint, test, build and tarball smoke test on Linux, macOS and Windows across Node 20, 22 and 24.</p></li>
+      <li><span class="file">.github/workflows/release.yml</span><p>On a <code>v*.*.*</code> tag: verify, publish to npm with trusted publishing (no tokens), GitHub Packages, a GitHub Release with checksums, and a Homebrew formula bump.</p></li>
+      <li><span class="file">scripts/verify-release.sh</span><p>A pre-publish gate you can run locally before anything ships.</p></li>
+      <li><span class="file">scripts/homebrew/&lt;bin&gt;.rb</span><p>A seed formula, copied into your tap on the first release.</p></li>
+    </ul>
+    <p style="color:var(--muted);font-size:15px;margin-top:14px">It also fills in missing <code>package.json</code> fields — <code>repository</code>, <code>files</code>, <code>engines</code>, <code>publishConfig</code>, <code>scripts.verify</code> — and never overwrites what you set. Re-running <code>init</code> is safe.</p>
+  </section>
+
+  <section>
+    <h2>Three commands</h2>
+    <div class="cmd"><code>packnpub <b>init</b></code><p>Add CI, release workflow, verify script and Homebrew formula.</p></div>
+    <div class="cmd"><code>packnpub <b>doctor</b></code><p>Check the package is ready to publish.</p></div>
+    <div class="cmd"><code>packnpub <b>verify</b></code><p>Run the pre-publish gate: clean git tree, tag matches version, no secret-looking or source files in the tarball, bin shebang, publint, arethetypeswrong, and a full install-and-run smoke test in an empty directory.</p></div>
+  </section>
+
+  <footer>
+    <a href="https://www.npmjs.com/package/packnpub">npm</a>
+    <a href="https://github.com/RemyLoveLogicAI/PacknPub">GitHub</a>
+    <span>MIT &copy; 2026</span>
+  </footer>
+</main>
+</body>
+</html>
