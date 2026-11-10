@@ -1,0 +1,148 @@
+name: Release
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      tarball: ${{ steps.pack.outputs.tarball }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - id: meta
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if [ "v$VERSION" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match package.json v$VERSION"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+      - run: npm ci
+      - run: npm run lint --if-present && npm test --if-present && npm run build --if-present
+      - run: npm run check:pkg --if-present
+      - run: bash scripts/verify-release.sh --skip-git
+      - id: pack
+        run: |
+          TARBALL=$(npm pack --silent)
+          sha256sum "$TARBALL" > SHA256SUMS.txt
+          echo "tarball=$TARBALL" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package
+          path: |
+            *.tgz
+            SHA256SUMS.txt
+# >>> npm
+
+  npm:
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      # Trusted publishing (OIDC) needs npm >= 11.5.1; no NPM_TOKEN secret is used.
+      - run: npm install -g npm@latest
+      - uses: actions/download-artifact@v4
+        with:
+          name: package
+      - run: npm publish "./${{ needs.verify.outputs.tarball }}" --access public
+# <<< npm
+# >>> github-packages
+
+  github-packages:
+    needs:
+      - verify
+# >>> npm
+      - npm
+# <<< npm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - id: scope
+        run: echo "owner=$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://npm.pkg.github.com
+          scope: "@${{ steps.scope.outputs.owner }}"
+      - run: npm ci && npm run build --if-present
+      # GitHub Packages only accepts names scoped to the (lowercase) repo owner.
+      - run: npm pkg set name="@${{ steps.scope.outputs.owner }}/{{UNSCOPED}}"
+      - run: npm publish --provenance=false
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+# <<< github-packages
+# >>> github-release
+
+  github-release:
+    needs:
+      - verify
+# >>> npm
+      - npm
+# <<< npm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: package
+      - run: gh release create "$GITHUB_REF_NAME" ./*.tgz SHA256SUMS.txt --generate-notes --verify-tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+# <<< github-release
+# >>> homebrew
+
+  homebrew:
+    needs: [verify, npm]
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: source
+      - uses: actions/checkout@v4
+        with:
+          repository: {{OWNER}}/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+      - name: Bump formula to the published npm tarball
+        working-directory: tap
+        env:
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          FORMULA=Formula/{{BIN}}.rb
+          mkdir -p Formula
+          [ -f "$FORMULA" ] || cp ../source/scripts/homebrew/{{BIN}}.rb "$FORMULA"
+          URL=$(npm view "{{PKG}}@$VERSION" dist.tarball)
+          SHA=$(curl -fsSL "$URL" | sha256sum | cut -d' ' -f1)
+          sed -i -E "s|^  url \".*\"|  url \"$URL\"|; s|^  sha256 \".*\"|  sha256 \"$SHA\"|" "$FORMULA"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$FORMULA"
+          git commit -m "{{BIN}} $VERSION"
+          git push
+# <<< homebrew
