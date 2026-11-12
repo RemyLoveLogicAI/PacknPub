@@ -1,0 +1,4 @@
+interface:
+  display_name: "PacknPub"
+  short_description: "Prepare repositories and Node releases with PacknPub"
+  default_prompt: "Use PacknPub to prepare this project for a safe, verifiable repository and release workflow."
