@@ -31,7 +31,9 @@ describe("init", () => {
       "scripts/homebrew/widget.rb",
     ]);
     expect(result.warnings).toEqual([]);
-    expect(statSync(path.join(dir, "scripts/verify-release.sh")).mode & 0o111).not.toBe(0);
+    if (process.platform !== "win32") {
+      expect(statSync(path.join(dir, "scripts/verify-release.sh")).mode & 0o111).not.toBe(0);
+    }
 
     const release = readFileSync(path.join(dir, ".github/workflows/release.yml"), "utf8");
     expect(release).toContain("repository: Acme/homebrew-tap");

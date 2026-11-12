@@ -8,7 +8,7 @@ export type Target = (typeof TARGETS)[number];
 export const TEMPLATES_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "templates");
 
 export function readTemplate(relative: string): string {
-  return readFileSync(path.join(TEMPLATES_DIR, relative), "utf8");
+  return readFileSync(path.join(TEMPLATES_DIR, relative), "utf8").replace(/\r\n/g, "\n");
 }
 
 const BLOCK = /^[ \t]*# >>> ([\w-]+)\n([\s\S]*?)^[ \t]*# <<< \1\n/gm;
