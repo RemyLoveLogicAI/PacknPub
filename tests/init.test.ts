@@ -1,10 +1,10 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { doctor } from "../src/doctor.js";
-import { dryRunFollowUp, init, UsageError } from "../src/init.js";
+import { dryRunFollowUp, init, shellSingleQuote, UsageError, writeAtomic } from "../src/init.js";
 
 let dir: string;
 
@@ -77,7 +77,7 @@ describe("init", () => {
     expect(existsSync(path.join(dir, ".github"))).toBe(false);
   });
 
-  it("dry-run next preserves owner, targets, and force", async () => {
+  it("dry-run next preserves owner, targets, and force with shell quoting", async () => {
     makeProject({ name: "widget", version: "0.1.0" });
     const result = await init({
       cwd: dir,
@@ -87,13 +87,27 @@ describe("init", () => {
       targets: "github-release",
       force: true,
     });
-    expect(result.next).toBe("npx packnpub init --yes --owner acme --targets github-release --force");
+    expect(result.next).toBe(
+      "npx packnpub init --yes --owner 'acme' --targets 'github-release' --force",
+    );
     expect(dryRunFollowUp("acme", ["npm", "github-release"], false)).toBe(
-      "npx packnpub init --yes --owner acme --targets npm,github-release",
+      "npx packnpub init --yes --owner 'acme' --targets 'npm,github-release'",
     );
     expect(dryRunFollowUp("OWNER", ["npm", "github-release", "github-packages", "homebrew"])).toBe(
       "npx packnpub init --yes",
     );
+    expect(shellSingleQuote("acme;rm -rf /")).toBe("'acme;rm -rf /'");
+    expect(shellSingleQuote("o'wner")).toBe(`'o'\\''wner'`);
+  });
+
+  it("preserves existing file mode when writeAtomic overwrites without an explicit mode", () => {
+    if (process.platform === "win32") return;
+    const file = path.join(dir, "secret.json");
+    writeFileSync(file, "{}\n");
+    chmodSync(file, 0o600);
+    writeAtomic(file, '{"ok":true}\n');
+    expect(statSync(file).mode & 0o777).toBe(0o600);
+    expect(readFileSync(file, "utf8")).toBe('{"ok":true}\n');
   });
 
   it("uses a placeholder owner and warns when no remote exists", async () => {
@@ -108,5 +122,7 @@ describe("init", () => {
     makeProject({ name: "widget", version: "0.1.0" });
     await expect(init({ cwd: dir, interactive: false, targets: "pypi" })).rejects.toThrow(/unknown target/);
     await expect(init({ cwd: dir, interactive: false, targets: "homebrew" })).rejects.toThrow(/add npm/);
+    await expect(init({ cwd: dir, interactive: false, owner: "acme;rm" })).rejects.toThrow(/invalid --owner/);
+    await expect(init({ cwd: dir, interactive: false, owner: "acme $(id)" })).rejects.toThrow(/invalid --owner/);
   });
 });

@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { detectProject } from "./detect.js";
 import { OWNER_PLACEHOLDER } from "./init.js";
@@ -12,9 +12,17 @@ export interface Check {
   detail: string;
 }
 
-/** Strip C0 controls (except tab/LF/CR) so manifest values cannot spoof terminal output. */
+/** Strip C0 + C1 controls (including CR/LF/tab) so formatChecks cannot be line-spoofed. */
 export function sanitizeText(value: string): string {
-  return value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "");
+  return value.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
+}
+
+function isRegularFile(filePath: string): boolean {
+  try {
+    return statSync(filePath).isFile();
+  } catch {
+    return false;
+  }
 }
 
 function onPath(command: string): boolean {
@@ -73,7 +81,7 @@ export function doctor(cwd: string): Check[] {
       add("release owner", false, "release.yml exists but could not be read");
     }
   }
-  const hasLock = existsSync(path.join(cwd, "package-lock.json"));
+  const hasLock = isRegularFile(path.join(cwd, "package-lock.json"));
   add(
     "lockfile",
     hasLock,

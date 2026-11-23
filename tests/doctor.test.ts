@@ -76,12 +76,22 @@ describe("doctor", () => {
     expect(nextAfterDoctor(checks)).not.toContain("verify");
   });
 
+  it("treats a package-lock.json directory as a missing lockfile", async () => {
+    seed();
+    writeReadme("# widget\n\nnpx packnpub init\n");
+    await init({ cwd: dir, interactive: false });
+    mkdirSync(path.join(dir, "package-lock.json"));
+    expect(doctor(dir).find((c) => c.name === "lockfile")?.status).toBe("fail");
+  });
+
   it("strips control characters from formatted checks", () => {
     const out = formatChecks([{ name: "pkg", status: "pass", detail: "evil\u001b[31mspoof\u0007" }]);
     expect(out).not.toContain("\u001b");
     expect(out).not.toContain("\u0007");
     expect(out).toContain("evil[31mspoof");
     expect(sanitizeText("a\u0000b")).toBe("ab");
+    expect(sanitizeText("line\rspoof\nok\tbad")).toBe("linespoofokbad");
+    expect(sanitizeText("x\u0085y\u009Fz")).toBe("xyz");
   });
 
   it("chooses the next command from check severity", () => {

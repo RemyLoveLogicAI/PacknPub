@@ -1,16 +1,41 @@
-import { chmodSync, existsSync, mkdirSync, renameSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, renameSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { createInterface } from "node:readline/promises";
 import { detectProject, unscopedName, type PackageJson, type Project } from "./detect.js";
 import type { Check } from "./doctor.js";
 import { TARGETS, formulaClassName, readTemplate, render, type Target } from "./templates.js";
 
-function writeAtomic(dest: string, contents: string, mode?: number): void {
+/** POSIX single-quote escape for values embedded in suggested shell commands. */
+export function shellSingleQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+/** Write via temp+rename; preserve an existing destination mode when overwriting. */
+export function writeAtomic(dest: string, contents: string, mode?: number): void {
   mkdirSync(path.dirname(dest), { recursive: true });
   const tmp = `${dest}.${process.pid}.${Date.now()}.tmp`;
   writeFileSync(tmp, contents);
-  if (mode !== undefined) chmodSync(tmp, mode);
+  let applyMode = mode;
+  if (applyMode === undefined && existsSync(dest)) {
+    try {
+      applyMode = statSync(dest).mode & 0o777;
+    } catch {
+      // destination unreadable — leave umask default on the temp file
+    }
+  }
+  if (applyMode !== undefined) chmodSync(tmp, applyMode);
   renameSync(tmp, dest);
+}
+
+const OWNER_RE = /^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/;
+
+function assertOwner(owner: string): void {
+  if (owner === OWNER_PLACEHOLDER) return;
+  if (owner.length > 39 || !OWNER_RE.test(owner)) {
+    throw new UsageError(
+      `invalid --owner "${owner}": use a GitHub user or org name (letters, digits, ._-; no spaces or shell metacharacters)`,
+    );
+  }
 }
 
 export interface InitOptions {
@@ -98,6 +123,8 @@ export async function init(options: InitOptions): Promise<InitResult> {
   if (!owner) {
     owner = OWNER_PLACEHOLDER;
     warnings.push(`no GitHub remote found; wrote "${OWNER_PLACEHOLDER}" as a placeholder. Re-run with --owner <user-or-org> --force.`);
+  } else {
+    assertOwner(owner);
   }
 
   const binName = project.binName ?? unscopedName(project.name);
@@ -145,9 +172,9 @@ export async function init(options: InitOptions): Promise<InitResult> {
 /** Rebuilds the real init command so a dry-run follow-up matches the previewed configuration. */
 export function dryRunFollowUp(owner: string, targets: Target[], force?: boolean): string {
   const parts = ["npx packnpub init --yes"];
-  if (owner !== OWNER_PLACEHOLDER) parts.push(`--owner ${owner}`);
+  if (owner !== OWNER_PLACEHOLDER) parts.push(`--owner ${shellSingleQuote(owner)}`);
   const isDefault = targets.length === TARGETS.length && TARGETS.every((t) => targets.includes(t));
-  if (!isDefault) parts.push(`--targets ${targets.join(",")}`);
+  if (!isDefault) parts.push(`--targets ${shellSingleQuote(targets.join(","))}`);
   if (force) parts.push("--force");
   return parts.join(" ");
 }
