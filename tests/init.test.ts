@@ -124,5 +124,7 @@ describe("init", () => {
     await expect(init({ cwd: dir, interactive: false, targets: "homebrew" })).rejects.toThrow(/add npm/);
     await expect(init({ cwd: dir, interactive: false, owner: "acme;rm" })).rejects.toThrow(/invalid --owner/);
     await expect(init({ cwd: dir, interactive: false, owner: "acme $(id)" })).rejects.toThrow(/invalid --owner/);
+    await expect(init({ cwd: dir, interactive: false, owner: "" })).rejects.toThrow(/must not be empty/);
+    await expect(init({ cwd: dir, interactive: false, owner: "   " })).rejects.toThrow(/must not be empty/);
   });
 });

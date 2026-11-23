@@ -31,9 +31,11 @@ const OWNER_RE = /^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/;
 
 function assertOwner(owner: string): void {
   if (owner === OWNER_PLACEHOLDER) return;
-  if (owner.length > 39 || !OWNER_RE.test(owner)) {
+  if (!owner || owner.length > 39 || !OWNER_RE.test(owner)) {
     throw new UsageError(
-      `invalid --owner "${owner}": use a GitHub user or org name (letters, digits, ._-; no spaces or shell metacharacters)`,
+      owner
+        ? `invalid --owner "${owner}": use a GitHub user or org name (letters, digits, ._-; no spaces or shell metacharacters)`
+        : "invalid --owner: value must not be empty",
     );
   }
 }
@@ -112,7 +114,14 @@ export async function init(options: InitOptions): Promise<InitResult> {
   if (!project) throw new UsageError(`no package.json with a "name" in ${options.cwd}. Run \`npm init -y\` first.`);
 
   let targets = parseTargets(options.targets);
-  let owner = options.owner ?? project.owner;
+  // Distinguish omitted --owner (undefined) from an explicit empty/whitespace value.
+  let owner: string | undefined;
+  if (options.owner !== undefined) {
+    owner = options.owner.trim();
+    assertOwner(owner);
+  } else {
+    owner = project.owner;
+  }
   const repo = project.repo ?? unscopedName(project.name);
 
   if (options.interactive) {
