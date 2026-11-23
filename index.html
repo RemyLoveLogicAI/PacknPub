@@ -303,7 +303,7 @@
         { html: "  ok    bin shebang: ./bin/cli.js", delay: 12, className: "ok" },
         { html: "  ok    release owner: set", delay: 12, className: "ok" },
         { html: "", delay: 8 },
-        { html: "Next: build if needed, commit the scaffold, then npx packnpub verify --skip-tag (or add --skip-git for an initial check)", delay: 20 },
+        { html: "Next: npm run build if files includes dist, commit the scaffold, then npx packnpub verify --skip-tag (or add --skip-git for an initial check)", delay: 20 },
       ];
 
       const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -347,17 +347,20 @@
       const toast = document.getElementById("toast");
       btn.addEventListener("click", async () => {
         const cmd = "npx packnpub init";
+        let ok = false;
         try {
           await navigator.clipboard.writeText(cmd);
+          ok = true;
         } catch {
           const ta = document.createElement("textarea");
           ta.value = cmd;
           document.body.appendChild(ta);
           ta.select();
-          document.execCommand("copy");
+          ok = document.execCommand("copy");
           ta.remove();
         }
-        toast.classList.add("show");
+        toast.textContent = ok ? "Copied to clipboard" : "Copy failed — select and copy manually";
+        toast.classList.toggle("show", true);
         clearTimeout(toast._t);
         toast._t = setTimeout(() => toast.classList.remove("show"), 1600);
       });

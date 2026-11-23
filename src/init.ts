@@ -1,9 +1,17 @@
-import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { createInterface } from "node:readline/promises";
 import { detectProject, unscopedName, type PackageJson, type Project } from "./detect.js";
 import type { Check } from "./doctor.js";
 import { TARGETS, formulaClassName, readTemplate, render, type Target } from "./templates.js";
+
+function writeAtomic(dest: string, contents: string, mode?: number): void {
+  mkdirSync(path.dirname(dest), { recursive: true });
+  const tmp = `${dest}.${process.pid}.${Date.now()}.tmp`;
+  writeFileSync(tmp, contents);
+  if (mode !== undefined) chmodSync(tmp, mode);
+  renameSync(tmp, dest);
+}
 
 export interface InitOptions {
   cwd: string;
@@ -121,15 +129,13 @@ export async function init(options: InitOptions): Promise<InitResult> {
     }
     result.created.push(file.to);
     if (options.dryRun) continue;
-    mkdirSync(path.dirname(dest), { recursive: true });
-    writeFileSync(dest, render(readTemplate(file.from), vars, targets));
-    if (file.mode) chmodSync(dest, file.mode);
+    writeAtomic(dest, render(readTemplate(file.from), vars, targets), file.mode);
   }
 
   const { pkg, patched } = patchManifest(project, owner, repo);
   result.patched = patched;
   if (patched.length && !options.dryRun) {
-    writeFileSync(path.join(options.cwd, "package.json"), `${JSON.stringify(pkg, null, 2)}\n`);
+    writeAtomic(path.join(options.cwd, "package.json"), `${JSON.stringify(pkg, null, 2)}\n`);
   }
 
   result.next = options.dryRun ? dryRunFollowUp(owner, targets, options.force) : "npx packnpub doctor";

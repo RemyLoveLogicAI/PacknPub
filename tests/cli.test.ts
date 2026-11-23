@@ -70,6 +70,7 @@ describe("cli", () => {
     expect(code).toBe(0);
     const out = logs.join("\n");
     expect(out).toContain("Doctor");
+    expect(out).toContain("files includes dist");
     expect(out).toContain("commit the scaffold");
     expect(out).toContain("npx packnpub verify --skip-tag");
     expect(out).toContain("--skip-git");
@@ -78,6 +79,7 @@ describe("cli", () => {
 
   it("init --json includes checks", async () => {
     seedProject("https://github.com/acme/widget.git");
+    writeFileSync(path.join(dir, "package-lock.json"), "{}\n");
     await run(["init", "--yes", "--json"], dir);
     const payload = JSON.parse(logs.join("\n"));
     expect(payload.created.length).toBeGreaterThan(0);
@@ -85,8 +87,18 @@ describe("cli", () => {
     expect(payload.next).toContain("verify");
   });
 
+  it("init without lockfile blocks verify next-step", async () => {
+    seedProject("https://github.com/acme/widget.git");
+    const code = await run(["init", "--yes", "--json"], dir);
+    expect(code).toBe(1);
+    const payload = JSON.parse(logs.join("\n"));
+    expect(payload.next).toContain("npm install");
+    expect(payload.next).not.toContain("verify");
+  });
+
   it("doctor --json returns an array", async () => {
     seedProject("https://github.com/acme/widget.git");
+    writeFileSync(path.join(dir, "package-lock.json"), "{}\n");
     await run(["init", "--yes"], dir);
     logs.length = 0;
     const code = await run(["doctor", "--json"], dir);
