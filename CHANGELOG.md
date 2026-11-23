@@ -3,6 +3,8 @@
 ## 0.1.1
 
 - `packnpub init` finishes with a live doctor scorecard and points at `verify` when the package is healthy.
+- After a healthy scaffold, next-step copy tells you to commit (or use `--skip-git`) before `verify`, since the working tree is dirty.
+- Dry-run `init` follow-up preserves `--owner`, `--targets`, and `--force` so the real run matches the preview.
 - `packnpub doctor` checks that README opens with a real install/init command, not just that the file exists.
 - Landing page redesigned (brand-first, typed happy-path demo, copy-to-clipboard) and GitHub Pages workflow added.
 

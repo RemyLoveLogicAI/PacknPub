@@ -81,5 +81,6 @@ export function nextAfterDoctor(checks: Check[]): string {
   if (checks.some((c) => c.status === "fail")) {
     return "fix the FAIL items above, then npx packnpub doctor";
   }
-  return "npx packnpub verify --skip-tag";
+  // verify requires a clean tree; init just dirtied it — commit first, or use --skip-git once.
+  return "build if needed, commit the scaffold, then npx packnpub verify --skip-tag (or add --skip-git for an initial check)";
 }

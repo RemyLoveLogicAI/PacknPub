@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { doctor } from "../src/doctor.js";
-import { init, UsageError } from "../src/init.js";
+import { dryRunFollowUp, init, UsageError } from "../src/init.js";
 
 let dir: string;
 
@@ -75,6 +75,25 @@ describe("init", () => {
     const result = await init({ cwd: dir, interactive: false, dryRun: true });
     expect(result.created).toHaveLength(4);
     expect(existsSync(path.join(dir, ".github"))).toBe(false);
+  });
+
+  it("dry-run next preserves owner, targets, and force", async () => {
+    makeProject({ name: "widget", version: "0.1.0" });
+    const result = await init({
+      cwd: dir,
+      interactive: false,
+      dryRun: true,
+      owner: "acme",
+      targets: "github-release",
+      force: true,
+    });
+    expect(result.next).toBe("npx packnpub init --yes --owner acme --targets github-release --force");
+    expect(dryRunFollowUp("acme", ["npm", "github-release"], false)).toBe(
+      "npx packnpub init --yes --owner acme --targets npm,github-release",
+    );
+    expect(dryRunFollowUp("OWNER", ["npm", "github-release", "github-packages", "homebrew"])).toBe(
+      "npx packnpub init --yes",
+    );
   });
 
   it("uses a placeholder owner and warns when no remote exists", async () => {

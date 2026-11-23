@@ -44,7 +44,10 @@ describe("doctor", () => {
   });
 
   it("chooses the next command from check severity", () => {
-    expect(nextAfterDoctor([{ name: "x", status: "pass", detail: "" }])).toBe("npx packnpub verify --skip-tag");
+    const next = nextAfterDoctor([{ name: "x", status: "pass", detail: "" }]);
+    expect(next).toContain("commit the scaffold");
+    expect(next).toContain("npx packnpub verify --skip-tag");
+    expect(next).toContain("--skip-git");
     expect(nextAfterDoctor([{ name: "x", status: "fail", detail: "" }])).toContain("fix the FAIL");
   });
 });

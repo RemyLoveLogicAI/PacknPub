@@ -132,8 +132,18 @@ export async function init(options: InitOptions): Promise<InitResult> {
     writeFileSync(path.join(options.cwd, "package.json"), `${JSON.stringify(pkg, null, 2)}\n`);
   }
 
-  result.next = options.dryRun ? "npx packnpub init --yes" : "npx packnpub doctor";
+  result.next = options.dryRun ? dryRunFollowUp(owner, targets, options.force) : "npx packnpub doctor";
   return result;
+}
+
+/** Rebuilds the real init command so a dry-run follow-up matches the previewed configuration. */
+export function dryRunFollowUp(owner: string, targets: Target[], force?: boolean): string {
+  const parts = ["npx packnpub init --yes"];
+  if (owner !== OWNER_PLACEHOLDER) parts.push(`--owner ${owner}`);
+  const isDefault = targets.length === TARGETS.length && TARGETS.every((t) => targets.includes(t));
+  if (!isDefault) parts.push(`--targets ${targets.join(",")}`);
+  if (force) parts.push("--force");
+  return parts.join(" ");
 }
 
 export function formatInitResult(result: InitResult, dryRun: boolean, formatDoctor?: (checks: Check[]) => string): string {

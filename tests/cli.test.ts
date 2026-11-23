@@ -70,7 +70,9 @@ describe("cli", () => {
     expect(code).toBe(0);
     const out = logs.join("\n");
     expect(out).toContain("Doctor");
-    expect(out).toContain("Next: npx packnpub verify --skip-tag");
+    expect(out).toContain("commit the scaffold");
+    expect(out).toContain("npx packnpub verify --skip-tag");
+    expect(out).toContain("--skip-git");
     expect(out).toMatch(/ok\s+release owner/);
   });
 
