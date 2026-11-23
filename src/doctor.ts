@@ -55,11 +55,31 @@ export function doctor(cwd: string): Check[] {
   add("lockfile", existsSync(path.join(cwd, "package-lock.json")), "CI uses `npm ci`, which needs package-lock.json", "warn");
 
   add("gh CLI", onPath("gh"), "used for GitHub Releases and the Homebrew tap", "warn");
-  add("README quickstart", existsSync(path.join(cwd, "README.md")), "README.md should open with the install command", "warn");
+
+  const readmePath = path.join(cwd, "README.md");
+  if (!existsSync(readmePath)) {
+    add("README quickstart", false, "add README.md that opens with the install command", "warn");
+  } else {
+    const head = readFileSync(readmePath, "utf8").slice(0, 1200);
+    const hasQuickstart = /(?:^|\n)(?:```[^\n]*\n)?(?:npx |npm (?:i|install) |pnpm |yarn |bunx |brew install )/m.test(head);
+    add(
+      "README quickstart",
+      hasQuickstart,
+      hasQuickstart ? "opens with an install / init command" : "README.md should open with the install command (npx / npm / brew)",
+      "warn",
+    );
+  }
   return checks;
 }
 
 export function formatChecks(checks: Check[]): string {
   const icon: Record<Status, string> = { pass: "ok  ", warn: "warn", fail: "FAIL" };
   return checks.map((c) => `  ${icon[c.status]}  ${c.name}: ${c.detail}`).join("\n");
+}
+
+export function nextAfterDoctor(checks: Check[]): string {
+  if (checks.some((c) => c.status === "fail")) {
+    return "fix the FAIL items above, then npx packnpub doctor";
+  }
+  return "npx packnpub verify --skip-tag";
 }

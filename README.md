@@ -23,11 +23,12 @@ Or with Homebrew: `brew install RemyLoveLogicAI/tap/packnpub`
 It also fills in missing `package.json` fields (`repository`, `files`, `engines`, `publishConfig`, `scripts.verify`) and never overwrites what you set.
 
 Re-running `init` is safe: existing files are skipped unless you pass `--force`.
+After writing files, `init` runs `doctor` and prints a scorecard — when everything passes, the next step is `npx packnpub verify --skip-tag`.
 
 ## Commands
 
 ```text
-packnpub init      Add CI, release workflow, verify script and Homebrew formula
+packnpub init      Add CI, release workflow, verify script and Homebrew formula; prints a doctor scorecard
 packnpub doctor    Check the package is ready to publish
 packnpub verify    Run the pre-publish gate (pack, install in isolation, smoke test)
 ```

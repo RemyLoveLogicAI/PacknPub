@@ -21,6 +21,7 @@ Use an existing trusted `packnpub` executable, or the project's local CLI when a
 ```sh
 packnpub init --yes --owner <owner> --targets <targets> --dry-run --json
 packnpub init --yes --owner <owner> --targets <targets>
+# init prints a doctor scorecard; re-check or machine-read with:
 packnpub doctor --json
 ```
 

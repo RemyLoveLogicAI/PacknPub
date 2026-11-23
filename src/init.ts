@@ -2,6 +2,7 @@ import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { createInterface } from "node:readline/promises";
 import { detectProject, unscopedName, type PackageJson, type Project } from "./detect.js";
+import type { Check } from "./doctor.js";
 import { TARGETS, formulaClassName, readTemplate, render, type Target } from "./templates.js";
 
 export interface InitOptions {
@@ -21,6 +22,7 @@ export interface InitResult {
   patched: string[];
   warnings: string[];
   next: string;
+  checks?: Check[];
 }
 
 export class UsageError extends Error {}
@@ -130,16 +132,19 @@ export async function init(options: InitOptions): Promise<InitResult> {
     writeFileSync(path.join(options.cwd, "package.json"), `${JSON.stringify(pkg, null, 2)}\n`);
   }
 
-  result.next = "npx packnpub doctor";
+  result.next = options.dryRun ? "npx packnpub init --yes" : "npx packnpub doctor";
   return result;
 }
 
-export function formatInitResult(result: InitResult, dryRun: boolean): string {
+export function formatInitResult(result: InitResult, dryRun: boolean, formatDoctor?: (checks: Check[]) => string): string {
   const lines = [dryRun ? "Dry run: nothing written." : "packnpub init"];
   for (const file of result.created) lines.push(`  ${dryRun ? "would create" : "created"}  ${file}`);
   for (const file of result.skipped) lines.push(`  skipped  ${file} (exists; --force to overwrite)`);
   if (result.patched.length) lines.push(`  ${dryRun ? "would patch" : "patched"}  package.json: ${result.patched.join(", ")}`);
   for (const warning of result.warnings) lines.push(`  warning  ${warning}`);
+  if (result.checks?.length && formatDoctor) {
+    lines.push("", "Doctor", formatDoctor(result.checks));
+  }
   lines.push("", `Next: ${result.next}`);
   return lines.join("\n");
 }
