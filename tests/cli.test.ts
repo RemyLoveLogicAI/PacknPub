@@ -87,11 +87,12 @@ describe("cli", () => {
     expect(payload.next).toContain("verify");
   });
 
-  it("init without lockfile blocks verify next-step", async () => {
-    seedProject("https://github.com/acme/widget.git");
+  it("init exits 0 after scaffold even when doctor has FAILs", async () => {
+    seedProject(); // no remote → release owner FAIL; no lockfile → lockfile FAIL
     const code = await run(["init", "--yes", "--json"], dir);
-    expect(code).toBe(1);
+    expect(code).toBe(0);
     const payload = JSON.parse(logs.join("\n"));
+    expect(payload.checks.some((c: { status: string }) => c.status === "fail")).toBe(true);
     expect(payload.next).toContain("npm install");
     expect(payload.next).not.toContain("verify");
   });

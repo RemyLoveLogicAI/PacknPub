@@ -88,7 +88,8 @@ export async function run(argv: string[], cwd = process.cwd()): Promise<number> 
             ? JSON.stringify(result)
             : formatInitResult(result, Boolean(values["dry-run"]), formatChecks),
         );
-        return result.checks?.some((c) => c.status === "fail") ? 1 : 0;
+        // Scaffold succeeded — doctor FAILs are guidance in the scorecard/next step, not init errors.
+        return 0;
       } catch (err) {
         if (err instanceof UsageError) {
           console.error(err.message);

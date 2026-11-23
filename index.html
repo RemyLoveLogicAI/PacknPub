@@ -245,7 +245,7 @@
 </style>
 </head>
 <body>
-  <div class="shell">
+  <main class="shell">
     <header class="hero">
       <h1 class="brand">Pack<em>n</em>Pub</h1>
       <p class="lede">One command turns any Node package into a production-grade release pipeline.</p>
@@ -253,9 +253,9 @@
         <button class="cta" type="button" id="copy-cmd" aria-label="Copy install command">Copy: npx packnpub init</button>
         <p class="ghost">or <a href="https://github.com/RemyLoveLogicAI/PacknPub">read the repo</a></p>
       </div>
-      <div class="stage" aria-label="Live demo of packnpub init">
+      <div class="stage" aria-label="Live demo of packnpub init" aria-hidden="true">
         <div class="stage-bar"><i></i><i></i><i></i><span>terminal · happy path</span></div>
-        <pre class="term" id="demo" role="status" aria-live="polite"></pre>
+        <pre class="term" id="demo"></pre>
       </div>
     </header>
 
@@ -284,8 +284,8 @@
       <a href="https://github.com/RemyLoveLogicAI/PacknPub#first-release-checklist">First release checklist</a>
       <span>MIT · LoveLogicAI</span>
     </footer>
-  </div>
-  <div class="toast" id="toast" role="status">Copied to clipboard</div>
+  </main>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <script>
     (function () {
       const demo = document.getElementById("demo");
@@ -359,8 +359,9 @@
           ok = document.execCommand("copy");
           ta.remove();
         }
-        toast.textContent = ok ? "Copied to clipboard" : "Copy failed — select and copy manually";
-        toast.classList.toggle("show", true);
+        if (!ok) return;
+        toast.textContent = "Copied to clipboard";
+        toast.classList.add("show");
         clearTimeout(toast._t);
         toast._t = setTimeout(() => toast.classList.remove("show"), 1600);
       });
