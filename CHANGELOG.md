@@ -9,7 +9,9 @@
 - README quickstart requires a real install/init command near the top (not `yarn test`-style noise); accepts `$` prompts, indentation, backticks, and `bun add`/`bun i`/`bun install`.
 - Landing copy toast shows only on successful clipboard write; Pages deploys only from `main`.
 - `init` exits 0 after a successful scaffold even when the attached doctor scorecard has FAILs.
-- Scaffold writes are atomic (temp file + rename) and preserve an existing destination mode on overwrite.
+- Scaffold writes are atomic (exclusive `0o600` temp + rename, mode preserved, temp cleaned up on failure).
+- Explicit empty `--targets` (e.g. `,`) is rejected; omitting the flag still selects all defaults.
+- Landing: copy button uses visible text as its accessible name; Pause/Play stops grid/cursor/typing motion (honors `prefers-reduced-motion`).
 - Dry-run follow-up shell-quotes `--owner` / `--targets`; invalid owners (including explicit empty `--owner ""`) are rejected.
 - Doctor sanitizes C0+C1 controls (including CR/LF/tab) and requires `package-lock.json` to be a regular file.
 - `packnpub doctor` checks that README opens with a real install/init command, not just that the file exists.
