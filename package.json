@@ -46,7 +46,7 @@
     "lint": "tsc --noEmit",
     "test": "vitest run",
     "check:pkg": "publint && attw --pack . --profile esm-only",
-    "verify": "bash scripts/verify-release.sh",
+    "verify": "npm run build && node bin/cli.js verify",
     "prepublishOnly": "npm run lint && npm test && npm run build && npm run check:pkg"
   },
   "publishConfig": {

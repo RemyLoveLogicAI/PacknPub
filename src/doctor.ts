@@ -55,6 +55,7 @@ export function doctor(cwd: string): Check[] {
   add("lockfile", existsSync(path.join(cwd, "package-lock.json")), "CI uses `npm ci`, which needs package-lock.json", "warn");
 
   add("gh CLI", onPath("gh"), "used for GitHub Releases and the Homebrew tap", "warn");
+  add("bash", onPath("bash"), "verify-release.sh and `packnpub verify` need bash (Git Bash or WSL on Windows)", "warn");
   add("README quickstart", existsSync(path.join(cwd, "README.md")), "README.md should open with the install command", "warn");
   return checks;
 }
