@@ -86,10 +86,34 @@ describe("init", () => {
 
   it("doctor reports bash availability for verify", () => {
     makeProject({ name: "widget", version: "0.1.0" }, "https://github.com/acme/widget");
-    const bash = doctor(dir).find((c) => c.name === "bash");
-    expect(bash).toBeDefined();
-    expect(["pass", "warn"]).toContain(bash!.status);
+    const originalPath = process.env.PATH;
+    const bashStatus = () => doctor(dir).find((c) => c.name === "bash")?.status;
+
+    try {
+      let bashDir: string | undefined;
+      try {
+        const found = execFileSync(process.platform === "win32" ? "where" : "which", ["bash"], {
+          encoding: "utf8",
+        })
+          .trim()
+          .split(/\r?\n/)[0];
+        if (found) bashDir = path.dirname(found);
+      } catch {
+        /* bash not on PATH in this environment */
+      }
+
+      if (bashDir) {
+        process.env.PATH = bashDir;
+        expect(bashStatus()).toBe("pass");
+      }
+
+      process.env.PATH = path.join(dir, "no-bash-bin");
+      expect(bashStatus()).toBe("warn");
+    } finally {
+      process.env.PATH = originalPath;
+    }
   });
+
 
   it("rejects bad input with usage errors", async () => {
     await expect(init({ cwd: dir, interactive: false })).rejects.toBeInstanceOf(UsageError);
