@@ -23,7 +23,8 @@ export function writeAtomic(dest: string, contents: string, mode?: number): void
       // destination unreadable — leave umask default on the temp file
     }
   }
-  if (applyMode !== undefined) chmodSync(tmp, applyMode);
+  // win32 chmod is a no-op for exec bits; skip to avoid EPERM noise
+  if (applyMode !== undefined && process.platform !== "win32") chmodSync(tmp, applyMode);
   renameSync(tmp, dest);
 }
 

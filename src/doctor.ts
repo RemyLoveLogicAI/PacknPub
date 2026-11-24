@@ -89,6 +89,7 @@ export function doctor(cwd: string): Check[] {
   );
 
   add("gh CLI", onPath("gh"), "used for GitHub Releases and the Homebrew tap", "warn");
+  add("bash", onPath("bash"), "verify-release.sh and `packnpub verify` need bash (Git Bash or WSL on Windows)", "warn");
 
   const readmePath = path.join(cwd, "README.md");
   if (!existsSync(readmePath)) {

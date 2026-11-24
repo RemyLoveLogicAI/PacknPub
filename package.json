@@ -1,6 +1,6 @@
 {
   "name": "packnpub",
-  "version": "0.1.1",
+  "version": "2.0.0",
   "description": "Add a production-grade release pipeline (npm, GitHub Releases, GitHub Packages, Homebrew) to any Node package with one command",
   "license": "MIT",
   "type": "module",
@@ -47,7 +47,7 @@
     "lint": "tsc --noEmit",
     "test": "vitest run",
     "check:pkg": "publint && attw --pack . --profile esm-only",
-    "verify": "bash scripts/verify-release.sh",
+    "verify": "npm run build && node bin/cli.js verify",
     "prepublishOnly": "npm run lint && npm test && npm run build && npm run check:pkg"
   },
   "publishConfig": {

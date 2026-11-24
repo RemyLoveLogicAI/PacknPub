@@ -40,12 +40,14 @@ It never prompts when stdin is not a terminal or `CI` is set.
 
 ## First release checklist
 
-1. `npx packnpub init && npx packnpub doctor`
-2. Ensure `package-lock.json` exists, commit the generated files, then `npm run build && npx packnpub verify --skip-tag` (use `--skip-git` only for a throwaway initial check)
-3. First publish by hand (npm needs the package to exist before trusted publishing can be set up): `npm publish --access public`
-4. On npmjs.com: package Settings → Trusted Publisher → GitHub Actions, workflow `release.yml`, environment `release`.
-5. In GitHub: create the `release` environment. For Homebrew, create `<owner>/homebrew-tap` and add a `HOMEBREW_TAP_TOKEN` secret (fine-grained token with write access to that repo only).
-6. From then on: `npm version patch && git push --follow-tags`.
+1. Keep the GitHub repo **public** for open packages (npm provenance / trusted publishing expect that for free provenance).
+2. Sign in to npm with an account that can publish the package name: `npm login` (do not commit tokens; `E401` means the token is missing or invalid).
+3. `npx packnpub init && npx packnpub doctor`
+4. Ensure `package-lock.json` exists, commit the generated files, then `npm run build && npx packnpub verify --skip-tag` (use `--skip-git` only for a throwaway initial check)
+5. First publish by hand — trusted publishing can only be configured after the package exists on npm. `init` sets `publishConfig.provenance: true`, which fails outside CI, so skip provenance for this bootstrap publish: `npm publish --access public --provenance=false` (or temporarily unset `publishConfig.provenance`). Re-enable provenance before the trusted-publisher / release.yml path.
+6. On npmjs.com: package Settings → Trusted Publisher → GitHub Actions, workflow `release.yml`, environment `release`.
+7. In GitHub: create the `release` environment. For Homebrew, create `<owner>/homebrew-tap` and add a `HOMEBREW_TAP_TOKEN` secret (fine-grained token with write access to that repo only).
+8. From then on: `npm version patch && git push --follow-tags` (release.yml publishes via OIDC; no `NPM_TOKEN` secret).
 
 ## Uninstall
 
