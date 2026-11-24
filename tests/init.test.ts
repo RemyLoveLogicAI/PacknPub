@@ -84,6 +84,13 @@ describe("init", () => {
     expect(doctor(dir).find((c) => c.name === "release owner")?.status).toBe("fail");
   });
 
+  it("doctor reports bash availability for verify", () => {
+    makeProject({ name: "widget", version: "0.1.0" }, "https://github.com/acme/widget");
+    const bash = doctor(dir).find((c) => c.name === "bash");
+    expect(bash).toBeDefined();
+    expect(["pass", "warn"]).toContain(bash!.status);
+  });
+
   it("rejects bad input with usage errors", async () => {
     await expect(init({ cwd: dir, interactive: false })).rejects.toBeInstanceOf(UsageError);
     makeProject({ name: "widget", version: "0.1.0" });

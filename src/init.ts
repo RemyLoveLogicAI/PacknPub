@@ -121,7 +121,8 @@ export async function init(options: InitOptions): Promise<InitResult> {
     if (options.dryRun) continue;
     mkdirSync(path.dirname(dest), { recursive: true });
     writeFileSync(dest, render(readTemplate(file.from), vars, targets));
-    if (file.mode) chmodSync(dest, file.mode);
+    // ponytail: win32 chmod is a no-op for exec bits; skip to avoid EPERM noise
+    if (file.mode && process.platform !== "win32") chmodSync(dest, file.mode);
   }
 
   const { pkg, patched } = patchManifest(project, owner, repo);
