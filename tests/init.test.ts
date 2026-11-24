@@ -130,8 +130,11 @@ describe("init", () => {
   it("honors an explicit mode over umask / existing mode", () => {
     if (process.platform === "win32") return;
     const file = path.join(dir, "script.sh");
+    writeFileSync(file, "old\n");
+    chmodSync(file, 0o600);
     writeAtomic(file, "#!/bin/sh\n", 0o755);
     expect(statSync(file).mode & 0o777).toBe(0o755);
+    expect(readFileSync(file, "utf8")).toBe("#!/bin/sh\n");
   });
 
   it("uses a placeholder owner and warns when no remote exists", async () => {
