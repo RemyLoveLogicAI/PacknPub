@@ -23,11 +23,12 @@ Or with Homebrew: `brew install RemyLoveLogicAI/tap/packnpub`
 It also fills in missing `package.json` fields (`repository`, `files`, `engines`, `publishConfig`, `scripts.verify`) and never overwrites what you set.
 
 Re-running `init` is safe: existing files are skipped unless you pass `--force`.
+After writing files, `init` runs `doctor` and prints a scorecard — when everything passes, run `npm run build` if `files` includes `dist`, commit the scaffold, then `npx packnpub verify --skip-tag` (or add `--skip-git` for an initial check on a dirty tree). A missing `package-lock.json` is a FAIL: create it with `npm install` before verify.
 
 ## Commands
 
 ```text
-packnpub init      Add CI, release workflow, verify script and Homebrew formula
+packnpub init      Add CI, release workflow, verify script and Homebrew formula; prints a doctor scorecard
 packnpub doctor    Check the package is ready to publish
 packnpub verify    Run the pre-publish gate (pack, install in isolation, smoke test)
 ```
@@ -42,7 +43,7 @@ It never prompts when stdin is not a terminal or `CI` is set.
 1. Keep the GitHub repo **public** for open packages (npm provenance / trusted publishing expect that for free provenance).
 2. Sign in to npm with an account that can publish the package name: `npm login` (do not commit tokens; `E401` means the token is missing or invalid).
 3. `npx packnpub init && npx packnpub doctor`
-4. `npm run build && npx packnpub verify --skip-tag`
+4. Ensure `package-lock.json` exists, commit the generated files, then `npm run build && npx packnpub verify --skip-tag` (use `--skip-git` only for a throwaway initial check)
 5. First publish by hand — trusted publishing can only be configured after the package exists on npm. `init` sets `publishConfig.provenance: true`, which fails outside CI, so skip provenance for this bootstrap publish: `npm publish --access public --provenance=false` (or temporarily unset `publishConfig.provenance`). Re-enable provenance before the trusted-publisher / release.yml path.
 6. On npmjs.com: package Settings → Trusted Publisher → GitHub Actions, workflow `release.yml`, environment `release`.
 7. In GitHub: create the `release` environment. For Homebrew, create `<owner>/homebrew-tap` and add a `HOMEBREW_TAP_TOKEN` secret (fine-grained token with write access to that repo only).

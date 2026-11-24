@@ -1,6 +1,6 @@
 import { createRequire } from "node:module";
 import { parseArgs } from "node:util";
-import { doctor, formatChecks } from "./doctor.js";
+import { doctor, formatChecks, nextAfterDoctor } from "./doctor.js";
 import { formatInitResult, init, UsageError } from "./init.js";
 import { verify } from "./verify.js";
 
@@ -30,8 +30,12 @@ Examples
   npx packnpub init --yes --targets npm,github-release
   npx packnpub verify --skip-tag`;
 
+type Command = "init" | "doctor" | "verify" | "help" | "";
+
 export async function run(argv: string[], cwd = process.cwd()): Promise<number> {
-  const [command = "help", ...rest] = argv[0]?.startsWith("-") ? ["", ...argv] : argv;
+  const raw = argv[0]?.startsWith("-") ? "" : (argv[0] ?? "help");
+  const rest = argv[0]?.startsWith("-") ? argv : argv.slice(1);
+  const command = raw as Command | string;
   if (command === "verify") return verify(cwd, rest);
 
   let values;
@@ -63,34 +67,45 @@ export async function run(argv: string[], cwd = process.cwd()): Promise<number> 
     return 0;
   }
 
-  if (command === "init") {
-    const interactive = Boolean(process.stdin.isTTY) && !process.env.CI && !values.yes && !values.json;
-    try {
-      const result = await init({
-        cwd,
-        force: values.force,
-        dryRun: values["dry-run"],
-        owner: values.owner,
-        targets: values.targets,
-        interactive,
-      });
-      console.log(values.json ? JSON.stringify(result) : formatInitResult(result, Boolean(values["dry-run"])));
-      return 0;
-    } catch (err) {
-      if (err instanceof UsageError) {
-        console.error(err.message);
-        return 2;
+  switch (command) {
+    case "init": {
+      const interactive = Boolean(process.stdin.isTTY) && !process.env.CI && !values.yes && !values.json;
+      try {
+        const result = await init({
+          cwd,
+          force: values.force,
+          dryRun: values["dry-run"],
+          owner: values.owner,
+          targets: values.targets,
+          interactive,
+        });
+        if (!values["dry-run"]) {
+          result.checks = doctor(cwd);
+          result.next = nextAfterDoctor(result.checks);
+        }
+        console.log(
+          values.json
+            ? JSON.stringify(result)
+            : formatInitResult(result, Boolean(values["dry-run"]), formatChecks),
+        );
+        // Scaffold succeeded — doctor FAILs are guidance in the scorecard/next step, not init errors.
+        return 0;
+      } catch (err) {
+        if (err instanceof UsageError) {
+          console.error(err.message);
+          return 2;
+        }
+        throw err;
       }
-      throw err;
+    }
+    case "doctor": {
+      const checks = doctor(cwd);
+      console.log(values.json ? JSON.stringify(checks) : formatChecks(checks));
+      return checks.some((c) => c.status === "fail") ? 1 : 0;
+    }
+    default: {
+      console.error(`unknown command: ${command}\n\n${HELP}`);
+      return 2;
     }
   }
-
-  if (command === "doctor") {
-    const checks = doctor(cwd);
-    console.log(values.json ? JSON.stringify(checks) : formatChecks(checks));
-    return checks.some((c) => c.status === "fail") ? 1 : 0;
-  }
-
-  console.error(`unknown command: ${command}\n\n${HELP}`);
-  return 2;
 }

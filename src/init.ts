@@ -1,8 +1,45 @@
-import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, renameSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { createInterface } from "node:readline/promises";
 import { detectProject, unscopedName, type PackageJson, type Project } from "./detect.js";
+import type { Check } from "./doctor.js";
 import { TARGETS, formulaClassName, readTemplate, render, type Target } from "./templates.js";
+
+/** POSIX single-quote escape for values embedded in suggested shell commands. */
+export function shellSingleQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+/** Write via temp+rename; preserve an existing destination mode when overwriting. */
+export function writeAtomic(dest: string, contents: string, mode?: number): void {
+  mkdirSync(path.dirname(dest), { recursive: true });
+  const tmp = `${dest}.${process.pid}.${Date.now()}.tmp`;
+  writeFileSync(tmp, contents);
+  let applyMode = mode;
+  if (applyMode === undefined && existsSync(dest)) {
+    try {
+      applyMode = statSync(dest).mode & 0o777;
+    } catch {
+      // destination unreadable — leave umask default on the temp file
+    }
+  }
+  // win32 chmod is a no-op for exec bits; skip to avoid EPERM noise
+  if (applyMode !== undefined && process.platform !== "win32") chmodSync(tmp, applyMode);
+  renameSync(tmp, dest);
+}
+
+const OWNER_RE = /^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/;
+
+function assertOwner(owner: string): void {
+  if (owner === OWNER_PLACEHOLDER) return;
+  if (!owner || owner.length > 39 || !OWNER_RE.test(owner)) {
+    throw new UsageError(
+      owner
+        ? `invalid --owner "${owner}": use a GitHub user or org name (letters, digits, ._-; no spaces or shell metacharacters)`
+        : "invalid --owner: value must not be empty",
+    );
+  }
+}
 
 export interface InitOptions {
   cwd: string;
@@ -21,6 +58,7 @@ export interface InitResult {
   patched: string[];
   warnings: string[];
   next: string;
+  checks?: Check[];
 }
 
 export class UsageError extends Error {}
@@ -77,7 +115,14 @@ export async function init(options: InitOptions): Promise<InitResult> {
   if (!project) throw new UsageError(`no package.json with a "name" in ${options.cwd}. Run \`npm init -y\` first.`);
 
   let targets = parseTargets(options.targets);
-  let owner = options.owner ?? project.owner;
+  // Distinguish omitted --owner (undefined) from an explicit empty/whitespace value.
+  let owner: string | undefined;
+  if (options.owner !== undefined) {
+    owner = options.owner.trim();
+    assertOwner(owner);
+  } else {
+    owner = project.owner;
+  }
   const repo = project.repo ?? unscopedName(project.name);
 
   if (options.interactive) {
@@ -88,6 +133,8 @@ export async function init(options: InitOptions): Promise<InitResult> {
   if (!owner) {
     owner = OWNER_PLACEHOLDER;
     warnings.push(`no GitHub remote found; wrote "${OWNER_PLACEHOLDER}" as a placeholder. Re-run with --owner <user-or-org> --force.`);
+  } else {
+    assertOwner(owner);
   }
 
   const binName = project.binName ?? unscopedName(project.name);
@@ -119,28 +166,38 @@ export async function init(options: InitOptions): Promise<InitResult> {
     }
     result.created.push(file.to);
     if (options.dryRun) continue;
-    mkdirSync(path.dirname(dest), { recursive: true });
-    writeFileSync(dest, render(readTemplate(file.from), vars, targets));
-    // ponytail: win32 chmod is a no-op for exec bits; skip to avoid EPERM noise
-    if (file.mode && process.platform !== "win32") chmodSync(dest, file.mode);
+    writeAtomic(dest, render(readTemplate(file.from), vars, targets), file.mode);
   }
 
   const { pkg, patched } = patchManifest(project, owner, repo);
   result.patched = patched;
   if (patched.length && !options.dryRun) {
-    writeFileSync(path.join(options.cwd, "package.json"), `${JSON.stringify(pkg, null, 2)}\n`);
+    writeAtomic(path.join(options.cwd, "package.json"), `${JSON.stringify(pkg, null, 2)}\n`);
   }
 
-  result.next = "npx packnpub doctor";
+  result.next = options.dryRun ? dryRunFollowUp(owner, targets, options.force) : "npx packnpub doctor";
   return result;
 }
 
-export function formatInitResult(result: InitResult, dryRun: boolean): string {
+/** Rebuilds the real init command so a dry-run follow-up matches the previewed configuration. */
+export function dryRunFollowUp(owner: string, targets: Target[], force?: boolean): string {
+  const parts = ["npx packnpub init --yes"];
+  if (owner !== OWNER_PLACEHOLDER) parts.push(`--owner ${shellSingleQuote(owner)}`);
+  const isDefault = targets.length === TARGETS.length && TARGETS.every((t) => targets.includes(t));
+  if (!isDefault) parts.push(`--targets ${shellSingleQuote(targets.join(","))}`);
+  if (force) parts.push("--force");
+  return parts.join(" ");
+}
+
+export function formatInitResult(result: InitResult, dryRun: boolean, formatDoctor?: (checks: Check[]) => string): string {
   const lines = [dryRun ? "Dry run: nothing written." : "packnpub init"];
   for (const file of result.created) lines.push(`  ${dryRun ? "would create" : "created"}  ${file}`);
   for (const file of result.skipped) lines.push(`  skipped  ${file} (exists; --force to overwrite)`);
   if (result.patched.length) lines.push(`  ${dryRun ? "would patch" : "patched"}  package.json: ${result.patched.join(", ")}`);
   for (const warning of result.warnings) lines.push(`  warning  ${warning}`);
+  if (result.checks?.length && formatDoctor) {
+    lines.push("", "Doctor", formatDoctor(result.checks));
+  }
   lines.push("", `Next: ${result.next}`);
   return lines.join("\n");
 }

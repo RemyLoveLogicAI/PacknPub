@@ -4,6 +4,7 @@
   "description": "Add a production-grade release pipeline (npm, GitHub Releases, GitHub Packages, Homebrew) to any Node package with one command",
   "license": "MIT",
   "type": "module",
+  "author": "Jeremy A. Morgan-Jones Sr. <luvlogic-ai@proton.me>",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/RemyLoveLogicAI/PacknPub.git"
