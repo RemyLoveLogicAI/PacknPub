@@ -6,7 +6,7 @@
 - After a healthy scaffold, next-step copy tells you to build `dist` when needed and commit (or use `--skip-git`) before `verify`.
 - Dry-run `init` follow-up preserves `--owner`, `--targets`, and `--force` so the real run matches the preview.
 - Doctor: lockfile is required for next-step, README read errors become checks, `gh --version` times out, and control chars are stripped from scorecard output.
-- README quickstart requires a real install/init command near the top (not `yarn test`-style noise).
+- README quickstart requires a real install/init command near the top (not `yarn test`-style noise); accepts `$` prompts, indentation, backticks, and `bun add`/`bun i`/`bun install`.
 - Landing copy toast shows only on successful clipboard write; Pages deploys only from `main`.
 - `init` exits 0 after a successful scaffold even when the attached doctor scorecard has FAILs.
 - Scaffold writes are atomic (temp file + rename) and preserve an existing destination mode on overwrite.

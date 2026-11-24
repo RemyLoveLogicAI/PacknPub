@@ -37,9 +37,14 @@ function onPath(command: string): boolean {
 /** Install/init command near the top of README — not deep content or `yarn test`-style noise. */
 export function hasReadmeQuickstart(content: string): boolean {
   const head = content.slice(0, 500);
-  return /(?:^|\n)(?:```[^\n]*\n)?(?:npx +\S+|npm +(?:i|install)\b|pnpm +(?:i|install|add)\b|yarn +add\b|bunx +\S+|brew +install\b)/m.test(
-    head,
-  );
+  // Real install/init only — not `yarn test`, `pnpm run build`, `bun run`, etc.
+  const install =
+    "(?:npx +\\S+|npm +(?:i|install)\\b|pnpm +(?:i|install|add)\\b|yarn +add\\b|bunx +\\S+|bun +(?:i|install|add)\\b|brew +install\\b)";
+  // Line start: indent, optional fence, optional shell prompt ($ # > %), optional wrapping backtick
+  const onLine = `(?:^|\\n)[ \\t]*(?:\`\`\`[^\\n]*\\n[ \\t]*)?(?:[$%>#][ \\t]*)?\`?${install}`;
+  // Inline code form anywhere in the opening window: `npx …` / `bun add …`
+  const inline = `\`${install}`;
+  return new RegExp(`(?:${onLine}|${inline})`, "m").test(head);
 }
 
 export function doctor(cwd: string): Check[] {

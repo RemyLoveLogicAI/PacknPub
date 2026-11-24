@@ -51,9 +51,21 @@ describe("doctor", () => {
   it("rejects broad yarn test noise and late install commands", () => {
     expect(hasReadmeQuickstart("# app\n\n```\nyarn test\n```\n")).toBe(false);
     expect(hasReadmeQuickstart("# app\n\n```\nnpm run build\n```\n")).toBe(false);
+    expect(hasReadmeQuickstart("# app\n\n```\npnpm run build\n```\n")).toBe(false);
+    expect(hasReadmeQuickstart("# app\n\n```\nbun test\n```\n")).toBe(false);
     const late = `${"x".repeat(520)}\nnpx packnpub init\n`;
     expect(hasReadmeQuickstart(late)).toBe(false);
     expect(hasReadmeQuickstart("# app\n\nnpm install -g packnpub\n")).toBe(true);
+  });
+
+  it("accepts prompted, indented, bun, and inline-code install forms", () => {
+    expect(hasReadmeQuickstart("# app\n\n```bash\n$ npx packnpub init\n```\n")).toBe(true);
+    expect(hasReadmeQuickstart("# app\n\n  $ npx packnpub init\n")).toBe(true);
+    expect(hasReadmeQuickstart("# app\n\n> npx packnpub init\n")).toBe(true);
+    expect(hasReadmeQuickstart("# app\n\n`npx packnpub init`\n")).toBe(true);
+    expect(hasReadmeQuickstart("# app\n\nInstall with `bun add -g packnpub` today.\n")).toBe(true);
+    expect(hasReadmeQuickstart("# app\n\n```\nbun i -g packnpub\n```\n")).toBe(true);
+    expect(hasReadmeQuickstart("# app\n\nbun install -g packnpub\n")).toBe(true);
   });
 
   it("reports unreadable README as a check instead of throwing", () => {
