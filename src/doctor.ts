@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
+import { runConformanceCheck } from "./check.js";
 import { detectProject } from "./detect.js";
 import { OWNER_PLACEHOLDER } from "./init.js";
 
@@ -74,9 +75,13 @@ export function doctor(cwd: string): Check[] {
     }
   }
 
-  for (const file of [".github/workflows/ci.yml", ".github/workflows/release.yml", "scripts/verify-release.sh"]) {
+  for (const file of [".github/workflows/ci.yml", ".github/workflows/release.yml"]) {
     add(file, existsSync(path.join(cwd, file)), existsSync(path.join(cwd, file)) ? "present" : "run `npx packnpub init`");
   }
+  const hasVerify =
+    existsSync(path.join(cwd, "scripts/verify-release.mjs")) || existsSync(path.join(cwd, "scripts/verify-release.sh"));
+  add("verify script", hasVerify, hasVerify ? "present" : "run `npx packnpub init`");
+
   const release = path.join(cwd, ".github/workflows/release.yml");
   if (existsSync(release)) {
     try {
@@ -93,8 +98,22 @@ export function doctor(cwd: string): Check[] {
     hasLock ? "present" : "run `npm install` to create package-lock.json (CI uses npm ci)",
   );
 
+  const report = runConformanceCheck(cwd, { localOnly: true });
+  const versionCheck = report.checks.find((c) => c.id === "manifest.version_consistency");
+  if (versionCheck) {
+    add("version consistency", versionCheck.status === "PASS", versionCheck.evidence);
+  }
+  const shaCheck = report.checks.find((c) => c.id === "workflow.actions_sha_pinned");
+  if (shaCheck && shaCheck.status !== "UNKNOWN") {
+    add("workflow SHA pinning", shaCheck.status === "PASS", shaCheck.evidence);
+  }
+  const envCheck = report.checks.find((c) => c.id === "workflow.human_approval_environment");
+  if (envCheck && envCheck.status !== "UNKNOWN") {
+    add("release approval gate", envCheck.status === "PASS", envCheck.evidence);
+  }
+
   add("gh CLI", onPath("gh"), "used for GitHub Releases and the Homebrew tap", "warn");
-  add("bash", onPath("bash"), "verify-release.sh and `packnpub verify` need bash (Git Bash or WSL on Windows)", "warn");
+  add("bash", onPath("bash"), "legacy verify-release.sh needs bash; verify-release.mjs runs natively on Node", "warn");
 
   const readmePath = path.join(cwd, "README.md");
   if (!existsSync(readmePath)) {

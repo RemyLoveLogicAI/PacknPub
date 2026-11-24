@@ -1,10 +1,10 @@
+# Managed by PacknPub (contract v1.0.0, template v1.0.0)
 name: Release
 on:
   push:
     tags: ["v*.*.*"]
 
-permissions:
-  contents: read
+permissions: {}
 
 concurrency:
   group: release-${{ github.ref }}
@@ -13,35 +13,42 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       version: ${{ steps.meta.outputs.version }}
       tarball: ${{ steps.pack.outputs.tarball }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          node-version: 22
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
           cache: npm
       - id: meta
+        env:
+          REF_NAME: ${{ github.ref_name }}
         run: |
           VERSION=$(node -p "require('./package.json').version")
-          if [ "v$VERSION" != "$GITHUB_REF_NAME" ]; then
-            echo "::error::Tag $GITHUB_REF_NAME does not match package.json v$VERSION"
+          if [ "v$VERSION" != "$REF_NAME" ]; then
+            echo "::error::Tag $REF_NAME does not match package.json v$VERSION"
             exit 1
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
       - run: npm ci
       - run: npm run lint --if-present && npm test --if-present && npm run build --if-present
       - run: npm run check:pkg --if-present
-      - run: bash scripts/verify-release.sh --skip-git
+      - run: node scripts/verify-release.mjs --skip-git
       - id: pack
         run: |
           TARBALL=$(npm pack --silent)
           sha256sum "$TARBALL" > SHA256SUMS.txt
           echo "tarball=$TARBALL" >> "$GITHUB_OUTPUT"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@26f96dfa697d77e81fd5907df203aa23a56210a8 # v4.3.0
         with:
           name: package
+          if-no-files-found: error
           path: |
             *.tgz
             SHA256SUMS.txt
@@ -54,83 +61,121 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version: 24
           registry-url: https://registry.npmjs.org
-      # Trusted publishing (OIDC) needs npm >= 11.5.1; no NPM_TOKEN secret is used.
-      - run: npm install -g npm@latest
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@fff8c148a8fdd56aa81fcb019f0b5f6c65700c4d # v4.3.0
         with:
           name: package
-      - run: npm publish "./${{ needs.verify.outputs.tarball }}" --access public
+      - name: Verify artifact checksum and publish to npm via OIDC
+        env:
+          TARBALL: ${{ needs.verify.outputs.tarball }}
+        run: |
+          sha256sum -c SHA256SUMS.txt
+          npm publish "./$TARBALL" --provenance --access public
 
   github-packages:
     needs:
       - verify
       - npm
     runs-on: ubuntu-latest
+    environment: release
     permissions:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
-      - id: scope
-        run: echo "owner=$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          node-version: 22
+          persist-credentials: false
+      - id: scope
+        env:
+          REPO_OWNER: ${{ github.repository_owner }}
+        run: echo "owner=$(echo "$REPO_OWNER" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
           registry-url: https://npm.pkg.github.com
           scope: "@${{ steps.scope.outputs.owner }}"
-      - run: npm ci && npm run build --if-present
-      # GitHub Packages only accepts names scoped to the (lowercase) repo owner.
-      - run: npm pkg set name="@${{ steps.scope.outputs.owner }}/packnpub"
-      - run: npm publish --provenance=false
+      - uses: actions/download-artifact@fff8c148a8fdd56aa81fcb019f0b5f6c65700c4d # v4.3.0
+        with:
+          name: package
+          path: verified-artifact
+      - name: Verify checksum and publish scoped package to GitHub Packages
         env:
+          SCOPE_OWNER: ${{ steps.scope.outputs.owner }}
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          (cd verified-artifact && sha256sum -c SHA256SUMS.txt)
+          npm ci && npm run build --if-present
+          npm pkg set name="@${SCOPE_OWNER}/packnpub"
+          npm publish --provenance=false
 
   github-release:
     needs:
       - verify
       - npm
     runs-on: ubuntu-latest
+    environment: release
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@fff8c148a8fdd56aa81fcb019f0b5f6c65700c4d # v4.3.0
         with:
           name: package
-      - run: gh release create "$GITHUB_REF_NAME" ./*.tgz SHA256SUMS.txt --generate-notes --verify-tag
+      - name: Verify checksum and create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          sha256sum -c SHA256SUMS.txt
+          gh release create "$REF_NAME" ./*.tgz SHA256SUMS.txt --generate-notes --verify-tag
 
   homebrew:
     needs: [verify, npm]
     runs-on: ubuntu-latest
     environment: release
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           path: source
-      - uses: actions/checkout@v4
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           repository: RemyLoveLogicAI/homebrew-tap
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           path: tap
-      - name: Bump formula to the published npm tarball
+      - name: Open PR bumping Homebrew formula to verified npm tarball
         working-directory: tap
         env:
           VERSION: ${{ needs.verify.outputs.version }}
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          PKG_NAME: "packnpub"
+          BIN_NAME: "packnpub"
         run: |
-          FORMULA=Formula/packnpub.rb
+          FORMULA="Formula/${BIN_NAME}.rb"
+          BRANCH="bump/${BIN_NAME}-${VERSION}"
           mkdir -p Formula
-          [ -f "$FORMULA" ] || cp ../source/scripts/homebrew/packnpub.rb "$FORMULA"
-          URL=$(npm view "packnpub@$VERSION" dist.tarball)
+          [ -f "$FORMULA" ] || cp "../source/scripts/homebrew/${BIN_NAME}.rb" "$FORMULA"
+          URL=$(npm view "${PKG_NAME}@${VERSION}" dist.tarball)
           SHA=$(curl -fsSL "$URL" | sha256sum | cut -d' ' -f1)
-          sed -i -E "s|^  url \".*\"|  url \"$URL\"|; s|^  sha256 \".*\"|  sha256 \"$SHA\"|" "$FORMULA"
+          node -e '
+            const fs = require("node:fs");
+            const [file, url, sha] = process.argv.slice(1);
+            const src = fs.readFileSync(file, "utf8")
+              .replace(/^  url ".*"/m, `  url "${url}"`)
+              .replace(/^  sha256 ".*"/m, `  sha256 "${sha}"`);
+            fs.writeFileSync(file, src);
+          ' "$FORMULA" "$URL" "$SHA"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
           git add "$FORMULA"
-          git commit -m "packnpub $VERSION"
-          git push
+          git commit -m "${BIN_NAME} ${VERSION}"
+          git push -u origin "$BRANCH"
+          gh pr create --title "${BIN_NAME} ${VERSION}" --body "Automated formula bump for verified release ${PKG_NAME}@${VERSION} (SHA-256: \`${SHA}\`)."

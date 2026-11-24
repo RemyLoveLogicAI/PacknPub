@@ -1,3 +1,4 @@
+# Managed by PacknPub (contract v1.0.0, template v1.0.0)
 name: CI
 on:
   pull_request:
@@ -16,8 +17,10 @@ jobs:
         node: [20, 22, 24]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: ${{ matrix.node }}
           cache: npm
@@ -26,6 +29,5 @@ jobs:
       - run: npm test --if-present
       - run: npm run build --if-present
       - run: npm run check:pkg --if-present
-      - name: Tarball smoke test
-        if: runner.os != 'Windows'
-        run: bash scripts/verify-release.sh --skip-git --skip-tag
+      - name: Cross-platform tarball smoke test
+        run: node scripts/verify-release.mjs --skip-git --skip-tag

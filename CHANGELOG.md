@@ -19,7 +19,13 @@
 
 ## 2.0.0
 
-- First public major release: bump package version from 0.1.0 to 2.0.0.
+- Contract v1.0.0 + managed `.packnpub/state.json` with SHA-256 tracking of generated files.
+- New commands: `check` (PASS/FAIL/HOLD), `diff`, `upgrade` (conflict-safe with backups), `rollback`.
+- Cross-platform `scripts/verify-release.mjs` (Node); bash `.sh` kept as a legacy fallback.
+- Workflow hardening: pin Actions to commit SHAs; require `environment: release` on publish jobs.
+- Docs: `docs/REFERENCE_STANDARD.md`, `docs/MIGRATION.md`, `docs/SECURITY.md`.
+- Agent skill at `packnpub/SKILL.md` for repository/release preparation.
+- Package major bump from 0.1.0 to 2.0.0.
 
 ## 0.1.0
 

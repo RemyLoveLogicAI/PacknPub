@@ -1,8 +1,18 @@
-import { chmodSync, existsSync, mkdirSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { createInterface } from "node:readline/promises";
+import { CONTRACT_VERSION, findNonGoal, TEMPLATE_VERSION } from "./contract.js";
 import { detectProject, unscopedName, type PackageJson, type Project } from "./detect.js";
 import type { Check } from "./doctor.js";
+import { unifiedDiff } from "./diff.js";
+import {
+  readState,
+  safeResolve,
+  sha256,
+  validateSafeName,
+  writeState,
+  type ManagedFileRecord,
+} from "./state.js";
 import { TARGETS, formulaClassName, readTemplate, render, type Target } from "./templates.js";
 
 /** POSIX single-quote escape for values embedded in suggested shell commands. */
@@ -78,6 +88,9 @@ export interface InitResult {
   skipped: string[];
   patched: string[];
   warnings: string[];
+  diffs: Record<string, string>;
+  contractVersion: string;
+  templateVersion: string;
   next: string;
   checks?: Check[];
 }
@@ -86,12 +99,18 @@ export class UsageError extends Error {}
 
 export const OWNER_PLACEHOLDER = "OWNER";
 
-function parseTargets(value: string | undefined): Target[] {
+export function parseTargets(value: string | undefined): Target[] {
   // Omitted flag → defaults. Explicit empty / comma-only → error (not a silent all-targets).
   if (value === undefined) return [...TARGETS];
   const picked = value.split(",").map((t) => t.trim()).filter(Boolean);
   if (!picked.length) {
     throw new UsageError(`--targets must list at least one of: ${TARGETS.join(", ")}`);
+  }
+  for (const t of picked) {
+    const nonGoal = findNonGoal(t);
+    if (nonGoal) {
+      throw new UsageError(`${nonGoal.errorCode}: unknown target "${t}" — ${nonGoal.reason}`);
+    }
   }
   const unknown = picked.filter((t) => !(TARGETS as readonly string[]).includes(t));
   if (unknown.length) throw new UsageError(`unknown target(s): ${unknown.join(", ")}. Valid: ${TARGETS.join(", ")}`);
@@ -129,7 +148,7 @@ function patchManifest(project: Project, owner: string, repo: string): { pkg: Pa
   fill("publishConfig", { access: "public", provenance: true });
   pkg.scripts ??= {};
   if (!pkg.scripts.verify) {
-    pkg.scripts.verify = "bash scripts/verify-release.sh";
+    pkg.scripts.verify = "node scripts/verify-release.mjs";
     patched.push("scripts.verify");
   }
   return { pkg, patched };
@@ -162,7 +181,13 @@ export async function init(options: InitOptions): Promise<InitResult> {
     assertOwner(owner);
   }
 
-  const binName = project.binName ?? unscopedName(project.name);
+  let binName: string;
+  try {
+    binName = validateSafeName("bin name", project.binName ?? unscopedName(project.name));
+  } catch (err) {
+    throw new UsageError(err instanceof Error ? err.message : String(err));
+  }
+
   const vars = {
     PKG: project.name,
     BIN: binName,
@@ -178,29 +203,62 @@ export async function init(options: InitOptions): Promise<InitResult> {
   const files: Array<{ to: string; from: string; mode?: number }> = [
     { to: ".github/workflows/ci.yml", from: "workflows/ci.yml" },
     { to: ".github/workflows/release.yml", from: "workflows/release.yml" },
+    { to: "scripts/verify-release.mjs", from: "scripts/verify-release.mjs", mode: 0o755 },
     { to: "scripts/verify-release.sh", from: "scripts/verify-release.sh", mode: 0o755 },
   ];
   if (targets.includes("homebrew")) files.push({ to: `scripts/homebrew/${binName}.rb`, from: "homebrew/formula.rb" });
 
-  const result: InitResult = { created: [], skipped: [], patched: [], warnings, next: "" };
+  const existingState = readState(options.cwd);
+  const managedFiles: Record<string, ManagedFileRecord> = { ...(existingState?.managedFiles ?? {}) };
+
+  const result: InitResult = {
+    created: [],
+    skipped: [],
+    patched: [],
+    warnings,
+    diffs: {},
+    contractVersion: CONTRACT_VERSION,
+    templateVersion: TEMPLATE_VERSION,
+    next: "",
+  };
+
   for (const file of files) {
-    const dest = path.join(options.cwd, file.to);
-    if (existsSync(dest) && !options.force) {
+    const dest = safeResolve(options.cwd, file.to);
+    const rendered = render(readTemplate(file.from), vars, targets);
+    const exists = existsSync(dest);
+    if (exists && !options.force) {
       result.skipped.push(file.to);
       continue;
     }
+    const before = exists ? readFileSync(dest, "utf8") : undefined;
+    const diffText = unifiedDiff(file.to, before, rendered);
+    if (diffText) result.diffs[file.to] = diffText;
+
     result.created.push(file.to);
     if (options.dryRun) continue;
-    writeAtomic(dest, render(readTemplate(file.from), vars, targets), file.mode);
+    writeAtomic(dest, rendered, file.mode);
+    managedFiles[file.to] = { sha256: sha256(rendered), template: file.from };
   }
 
   const { pkg, patched } = patchManifest(project, owner, repo);
   result.patched = patched;
   if (patched.length && !options.dryRun) {
-    writeAtomic(path.join(options.cwd, "package.json"), `${JSON.stringify(pkg, null, 2)}\n`);
+    writeAtomic(safeResolve(options.cwd, "package.json"), `${JSON.stringify(pkg, null, 2)}\n`);
   }
 
-  result.next = options.dryRun ? dryRunFollowUp(owner, targets, options.force) : "npx packnpub doctor";
+  if (!options.dryRun && (result.created.length > 0 || !existingState)) {
+    writeState(options.cwd, {
+      schemaVersion: 1,
+      contractVersion: CONTRACT_VERSION,
+      templateVersion: TEMPLATE_VERSION,
+      targets,
+      owner,
+      repo,
+      managedFiles,
+    });
+  }
+
+  result.next = options.dryRun ? dryRunFollowUp(owner, targets, options.force) : "npx packnpub check";
   return result;
 }
 
@@ -215,11 +273,17 @@ export function dryRunFollowUp(owner: string, targets: Target[], force?: boolean
 }
 
 export function formatInitResult(result: InitResult, dryRun: boolean, formatDoctor?: (checks: Check[]) => string): string {
-  const lines = [dryRun ? "Dry run: nothing written." : "packnpub init"];
+  const lines = [dryRun ? "Dry run: nothing written." : `packnpub init (contract v${result.contractVersion})`];
   for (const file of result.created) lines.push(`  ${dryRun ? "would create" : "created"}  ${file}`);
   for (const file of result.skipped) lines.push(`  skipped  ${file} (exists; --force to overwrite)`);
   if (result.patched.length) lines.push(`  ${dryRun ? "would patch" : "patched"}  package.json: ${result.patched.join(", ")}`);
   for (const warning of result.warnings) lines.push(`  warning  ${warning}`);
+  if (dryRun && Object.keys(result.diffs).length > 0) {
+    lines.push("", "Preview diffs:");
+    for (const diffText of Object.values(result.diffs)) {
+      lines.push(diffText);
+    }
+  }
   if (result.checks?.length && formatDoctor) {
     lines.push("", "Doctor", formatDoctor(result.checks));
   }
