@@ -43,7 +43,7 @@ It never prompts when stdin is not a terminal or `CI` is set.
 2. Sign in to npm with an account that can publish the package name: `npm login` (do not commit tokens; `E401` means the token is missing or invalid).
 3. `npx packnpub init && npx packnpub doctor`
 4. `npm run build && npx packnpub verify --skip-tag`
-5. First publish by hand — trusted publishing can only be configured after the package exists on npm: `npm publish --access public`
+5. First publish by hand — trusted publishing can only be configured after the package exists on npm. `init` sets `publishConfig.provenance: true`, which fails outside CI, so skip provenance for this bootstrap publish: `npm publish --access public --provenance=false` (or temporarily unset `publishConfig.provenance`). Re-enable provenance before the trusted-publisher / release.yml path.
 6. On npmjs.com: package Settings → Trusted Publisher → GitHub Actions, workflow `release.yml`, environment `release`.
 7. In GitHub: create the `release` environment. For Homebrew, create `<owner>/homebrew-tap` and add a `HOMEBREW_TAP_TOKEN` secret (fine-grained token with write access to that repo only).
 8. From then on: `npm version patch && git push --follow-tags` (release.yml publishes via OIDC; no `NPM_TOKEN` secret).
