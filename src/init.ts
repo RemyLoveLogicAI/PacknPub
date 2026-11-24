@@ -14,16 +14,23 @@ export function shellSingleQuote(value: string): string {
 export function writeAtomic(dest: string, contents: string, mode?: number): void {
   mkdirSync(path.dirname(dest), { recursive: true });
   const tmp = `${dest}.${process.pid}.${Date.now()}.tmp`;
+  let created = false;
   let settled = false;
   try {
     // Exclusive + owner-only until the final mode is applied
     writeFileSync(tmp, contents, { mode: 0o600, flag: "wx" });
+    created = true;
     let applyMode = mode;
-    if (applyMode === undefined && existsSync(dest)) {
-      try {
-        applyMode = statSync(dest).mode & 0o777;
-      } catch {
-        // destination unreadable — keep the restrictive 0o600 temp mode
+    if (applyMode === undefined) {
+      if (existsSync(dest)) {
+        try {
+          applyMode = statSync(dest).mode & 0o777;
+        } catch {
+          // destination unreadable — keep the restrictive 0o600 temp mode
+        }
+      } else if (process.platform !== "win32") {
+        // New file: match normal create semantics once the restrictive temp is ready
+        applyMode = 0o666 & ~process.umask();
       }
     }
     // win32 chmod is a no-op for exec bits; skip to avoid EPERM noise
@@ -31,7 +38,8 @@ export function writeAtomic(dest: string, contents: string, mode?: number): void
     renameSync(tmp, dest);
     settled = true;
   } finally {
-    if (!settled) {
+    // Only unlink temps THIS call created — never remove another writer's EEXIST collision
+    if (created && !settled) {
       try {
         unlinkSync(tmp);
       } catch {

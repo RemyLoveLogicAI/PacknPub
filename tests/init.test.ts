@@ -120,6 +120,20 @@ describe("init", () => {
     expect(readFileSync(file, "utf8")).toBe('{"ok":true}\n');
   });
 
+  it("applies umask-based mode for new files when mode is omitted", () => {
+    if (process.platform === "win32") return;
+    const file = path.join(dir, "fresh.json");
+    writeAtomic(file, "{}\n");
+    expect(statSync(file).mode & 0o777).toBe(0o666 & ~process.umask());
+  });
+
+  it("honors an explicit mode over umask / existing mode", () => {
+    if (process.platform === "win32") return;
+    const file = path.join(dir, "script.sh");
+    writeAtomic(file, "#!/bin/sh\n", 0o755);
+    expect(statSync(file).mode & 0o777).toBe(0o755);
+  });
+
   it("uses a placeholder owner and warns when no remote exists", async () => {
     makeProject({ name: "widget", version: "0.1.0" });
     const result = await init({ cwd: dir, interactive: false });
