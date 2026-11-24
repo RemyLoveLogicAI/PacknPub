@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdirSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { createInterface } from "node:readline/promises";
 import { detectProject, unscopedName, type PackageJson, type Project } from "./detect.js";
@@ -14,18 +14,31 @@ export function shellSingleQuote(value: string): string {
 export function writeAtomic(dest: string, contents: string, mode?: number): void {
   mkdirSync(path.dirname(dest), { recursive: true });
   const tmp = `${dest}.${process.pid}.${Date.now()}.tmp`;
-  writeFileSync(tmp, contents);
-  let applyMode = mode;
-  if (applyMode === undefined && existsSync(dest)) {
-    try {
-      applyMode = statSync(dest).mode & 0o777;
-    } catch {
-      // destination unreadable — leave umask default on the temp file
+  let settled = false;
+  try {
+    // Exclusive + owner-only until the final mode is applied
+    writeFileSync(tmp, contents, { mode: 0o600, flag: "wx" });
+    let applyMode = mode;
+    if (applyMode === undefined && existsSync(dest)) {
+      try {
+        applyMode = statSync(dest).mode & 0o777;
+      } catch {
+        // destination unreadable — keep the restrictive 0o600 temp mode
+      }
+    }
+    // win32 chmod is a no-op for exec bits; skip to avoid EPERM noise
+    if (applyMode !== undefined && process.platform !== "win32") chmodSync(tmp, applyMode);
+    renameSync(tmp, dest);
+    settled = true;
+  } finally {
+    if (!settled) {
+      try {
+        unlinkSync(tmp);
+      } catch {
+        // best-effort cleanup; preserve the original error from try
+      }
     }
   }
-  // win32 chmod is a no-op for exec bits; skip to avoid EPERM noise
-  if (applyMode !== undefined && process.platform !== "win32") chmodSync(tmp, applyMode);
-  renameSync(tmp, dest);
 }
 
 const OWNER_RE = /^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/;
@@ -66,8 +79,12 @@ export class UsageError extends Error {}
 export const OWNER_PLACEHOLDER = "OWNER";
 
 function parseTargets(value: string | undefined): Target[] {
-  if (!value) return [...TARGETS];
+  // Omitted flag → defaults. Explicit empty / comma-only → error (not a silent all-targets).
+  if (value === undefined) return [...TARGETS];
   const picked = value.split(",").map((t) => t.trim()).filter(Boolean);
+  if (!picked.length) {
+    throw new UsageError(`--targets must list at least one of: ${TARGETS.join(", ")}`);
+  }
   const unknown = picked.filter((t) => !(TARGETS as readonly string[]).includes(t));
   if (unknown.length) throw new UsageError(`unknown target(s): ${unknown.join(", ")}. Valid: ${TARGETS.join(", ")}`);
   if (picked.includes("homebrew") && !picked.includes("npm")) {

@@ -1,5 +1,15 @@
 import { execFileSync } from "node:child_process";
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -153,9 +163,21 @@ describe("init", () => {
     makeProject({ name: "widget", version: "0.1.0" });
     await expect(init({ cwd: dir, interactive: false, targets: "pypi" })).rejects.toThrow(/unknown target/);
     await expect(init({ cwd: dir, interactive: false, targets: "homebrew" })).rejects.toThrow(/add npm/);
+    await expect(init({ cwd: dir, interactive: false, targets: "," })).rejects.toThrow(/at least one/);
+    await expect(init({ cwd: dir, interactive: false, targets: "  ,  " })).rejects.toThrow(/at least one/);
+    await expect(init({ cwd: dir, interactive: false, targets: "" })).rejects.toThrow(/at least one/);
     await expect(init({ cwd: dir, interactive: false, owner: "acme;rm" })).rejects.toThrow(/invalid --owner/);
     await expect(init({ cwd: dir, interactive: false, owner: "acme $(id)" })).rejects.toThrow(/invalid --owner/);
     await expect(init({ cwd: dir, interactive: false, owner: "" })).rejects.toThrow(/must not be empty/);
     await expect(init({ cwd: dir, interactive: false, owner: "   " })).rejects.toThrow(/must not be empty/);
+  });
+
+  it("cleans up the temp file when writeAtomic fails before rename", () => {
+    const dest = path.join(dir, "blocked.json");
+    mkdirSync(dest); // rename onto a directory fails
+    const before = new Set(readdirSync(dir));
+    expect(() => writeAtomic(dest, '{"x":1}\n')).toThrow();
+    const leftovers = readdirSync(dir).filter((name) => name.includes(".tmp") && !before.has(name));
+    expect(leftovers).toEqual([]);
   });
 });
