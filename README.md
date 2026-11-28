@@ -9,7 +9,7 @@ Add a production-grade release pipeline to any Node package with one command.
 npx packnpub init
 ```
 
-Or with Homebrew: `brew install RemyLoveLogicAI/tap/packnpub`
+Or with Homebrew: `brew install LoveLogicAILLC/tap/packnpub`
 
 ## What `init` adds
 
