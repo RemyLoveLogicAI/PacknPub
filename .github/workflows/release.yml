@@ -115,7 +115,7 @@ jobs:
           path: source
       - uses: actions/checkout@v4
         with:
-          repository: RemyLoveLogicAI/homebrew-tap
+          repository: LoveLogicAILLC/homebrew-tap
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           path: tap
       - name: Bump formula to the published npm tarball

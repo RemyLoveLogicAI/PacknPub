@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Homebrew: point the README install line and the release workflow at the existing `LoveLogicAILLC/homebrew-tap`, and seed the formula with the 2.0.0 tarball URL.
 - `packnpub init` finishes with a live doctor scorecard and points at `verify` when the package is healthy.
 - After a healthy scaffold, next-step copy tells you to build `dist` when needed and commit (or use `--skip-git`) before `verify`.
 - Dry-run `init` follow-up preserves `--owner`, `--targets`, and `--force` so the real run matches the preview.
