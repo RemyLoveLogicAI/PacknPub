@@ -11,7 +11,10 @@ import {
   safeResolve,
   sha256,
   STATE_REL_PATH,
+  rubyStringBody,
+  validatePackageName,
   validateSafeName,
+  validateVersion,
   writeState,
   type ManagedFileRecord,
 } from "./state.js";
@@ -67,7 +70,16 @@ export function planProjectFiles(
 
   const owner = options.owner ?? existingState?.owner ?? project.owner ?? OWNER_PLACEHOLDER;
   const repo = existingState?.repo ?? project.repo ?? unscopedName(project.name);
-  const binName = validateSafeName("bin name", project.binName ?? unscopedName(project.name));
+  let binName: string;
+  try {
+    binName = validateSafeName("bin name", project.binName ?? unscopedName(project.name));
+    validatePackageName(project.name);
+    validateVersion(project.version);
+    validateSafeName("owner", owner);
+    validateSafeName("repo", repo);
+  } catch (err) {
+    throw new UsageError(err instanceof Error ? err.message : String(err));
+  }
 
   const vars: Record<string, string> = {
     PKG: project.name,
@@ -77,8 +89,8 @@ export function planProjectFiles(
     VERSION: project.version,
     UNSCOPED: unscopedName(project.name),
     FORMULA_CLASS: formulaClassName(binName),
-    DESCRIPTION: String(project.pkg.description ?? `${binName} command-line tool`),
-    LICENSE: String(project.pkg.license ?? "MIT"),
+    DESCRIPTION: rubyStringBody(String(project.pkg.description ?? `${binName} command-line tool`)),
+    LICENSE: rubyStringBody(String(project.pkg.license ?? "MIT")),
   };
 
   const specs: Array<{ to: string; from: string; mode?: number }> = [

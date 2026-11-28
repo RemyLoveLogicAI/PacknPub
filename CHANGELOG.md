@@ -26,6 +26,8 @@
 - Docs: `docs/REFERENCE_STANDARD.md`, `docs/MIGRATION.md`, `docs/SECURITY.md`.
 - Agent skill at `packnpub/SKILL.md` for repository/release preparation.
 - Package major bump from 0.1.0 to 2.0.0.
+- Security: managed writes refuse symlinks that resolve outside the project; bin, owner, repo, package name and version are allowlisted before templating; Homebrew `desc`/`license` are Ruby-escaped; GitHub Packages publishes the checksum-verified tarball instead of a rebuild; `verify-release.mjs` rejects unsafe bin names and fetches pinned `publint`/`attw` when they are not installed locally.
+- Conformance `check`: SHA pins are read from the `uses:` value (comments can't mask a mutable tag), publish jobs are found by behaviour as well as name, the `release` environment must match exactly, and job-level `write`/`write-all` grants are audited.
 
 ## 0.1.0
 

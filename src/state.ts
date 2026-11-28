@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 export const STATE_REL_PATH = ".packnpub/state.json";
@@ -29,25 +29,91 @@ export function sha256(content: string): string {
   return createHash("sha256").update(content, "utf8").digest("hex");
 }
 
-/** Ensures a relative path resolves strictly inside cwd (blocks path traversal and absolute escapes). */
+function existsNoFollow(p: string): boolean {
+  try {
+    lstatSync(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isInside(root: string, candidate: string): boolean {
+  return candidate === root || candidate.startsWith(root + path.sep);
+}
+
+/**
+ * Ensures a relative path resolves strictly inside cwd. Blocks traversal and absolute paths lexically,
+ * then resolves the deepest existing component (following symlinks) so a symlinked file or parent
+ * directory cannot redirect writes outside the project root.
+ */
 export function safeResolve(cwd: string, relativePath: string): string {
   if (!relativePath || path.isAbsolute(relativePath)) {
     throw new Error(`unsafe path outside project root: ${relativePath}`);
   }
   const root = path.resolve(cwd);
   const resolved = path.resolve(root, relativePath);
-  if (resolved !== root && !resolved.startsWith(root + path.sep)) {
+  if (!isInside(root, resolved)) {
     throw new Error(`path traversal blocked: ${relativePath}`);
+  }
+  let probe = resolved;
+  while (probe !== root && !existsNoFollow(probe)) probe = path.dirname(probe);
+  let realRoot = root;
+  try {
+    realRoot = realpathSync(root);
+  } catch {
+    // root does not exist yet; nothing below it can be a symlink
+    return resolved;
+  }
+  let realProbe: string;
+  try {
+    realProbe = realpathSync(probe);
+  } catch {
+    throw new Error(`symlink escape blocked (dangling link): ${relativePath}`);
+  }
+  if (!isInside(realRoot, realProbe)) {
+    throw new Error(`symlink escape blocked: ${relativePath} resolves outside the project root`);
   }
   return resolved;
 }
 
-/** Validates a bin name used in generated filenames so it cannot contain path separators or traversal segments. */
+const SAFE_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+const PACKAGE_NAME_RE = /^(?:@[A-Za-z0-9][A-Za-z0-9._~-]*\/)?[A-Za-z0-9][A-Za-z0-9._~-]*$/;
+const VERSION_RE = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.+-]+)?$/;
+
+/**
+ * Validates names that are interpolated into generated filenames, YAML, shell commands and Ruby
+ * (bin name, owner, repo). Only letters, digits, `.`, `_` and `-` are allowed, so quotes, newlines,
+ * shell metacharacters and path separators can never reach a template.
+ */
 export function validateSafeName(label: string, value: string): string {
-  if (!value || value === "." || value === ".." || /[\\/\0]/.test(value) || value.includes("..")) {
-    throw new Error(`unsafe ${label}: "${value}"`);
+  if (!value || value.includes("..") || !SAFE_NAME_RE.test(value)) {
+    throw new Error(`unsafe ${label}: ${JSON.stringify(value)} (allowed: letters, digits, ".", "_", "-")`);
   }
   return value;
+}
+
+/** Validates an npm package name before it is interpolated into generated workflows or formulas. */
+export function validatePackageName(value: string): string {
+  if (!value || value.includes("..") || !PACKAGE_NAME_RE.test(value)) {
+    throw new Error(`unsafe package name: ${JSON.stringify(value)}`);
+  }
+  return value;
+}
+
+/** Validates a semver-like version before it is interpolated into generated formulas or URLs. */
+export function validateVersion(value: string): string {
+  if (!value || !VERSION_RE.test(value)) {
+    throw new Error(`unsafe version: ${JSON.stringify(value)}`);
+  }
+  return value;
+}
+
+/** Escapes free text for the body of a Ruby double-quoted string (blocks `#{...}` interpolation). */
+export function rubyStringBody(value: string): string {
+  return value
+    .replace(/[\\"#]/g, (c) => `\\${c}`)
+    .replace(/[\u0000-\u001f\u007f]/g, (c) => `\\u{${c.charCodeAt(0).toString(16)}}`);
 }
 
 export function readState(cwd: string): PacknPubState | undefined {

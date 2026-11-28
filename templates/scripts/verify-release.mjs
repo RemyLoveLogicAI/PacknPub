@@ -66,6 +66,17 @@ if (typeof pkg.bin === "string") {
   }
 }
 
+// Bin names reach `npx` (through a shell on Windows): allow only plain command names.
+const SAFE_BIN_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+if (pkg.bin && typeof pkg.bin === "object") {
+  for (const key of Object.keys(pkg.bin)) {
+    if (!SAFE_BIN_RE.test(key) || key.includes("..")) fail(`unsafe bin name ${JSON.stringify(key)} (allowed: letters, digits, ".", "_", "-")`);
+  }
+}
+if (binName && (!SAFE_BIN_RE.test(binName) || binName.includes(".."))) {
+  fail(`unsafe bin name ${JSON.stringify(binName)} (allowed: letters, digits, ".", "_", "-")`);
+}
+
 if (!skipGit) {
   const status = run("git", ["status", "--porcelain"], { cwd }).trim();
   if (status) fail("working tree is dirty (commit, stash, or pass --skip-git)");
@@ -119,9 +130,16 @@ if (binEntry) {
   ok(`shebang in ${binEntry}`);
 }
 
+// Prefer the project's own pinned copies; otherwise fetch a pinned major so adopters
+// without these devDependencies still get the check.
+function toolArgs(localBin, spec) {
+  const local = path.join(cwd, "node_modules", ".bin", isWin ? `${localBin}.cmd` : localBin);
+  return existsSync(local) ? ["--no-install", localBin] : ["--yes", spec];
+}
+
 if (!skipNetwork) {
   try {
-    run(npxCmd, ["--no-install", "publint"], { cwd });
+    run(npxCmd, toolArgs("publint", "publint@0.3"), { cwd });
     ok("publint");
   } catch {
     fail("publint failed (run: npx publint)");
@@ -130,10 +148,10 @@ if (!skipNetwork) {
   if (pkg.exports) {
     const profile = JSON.stringify(pkg.exports).includes("require") ? "node16" : "esm-only";
     try {
-      run(npxCmd, ["--no-install", "attw", "--pack", ".", "--profile", profile], { cwd });
+      run(npxCmd, [...toolArgs("attw", "@arethetypeswrong/cli@0.18"), "--pack", ".", "--profile", profile], { cwd });
       ok(`attw (${profile})`);
     } catch {
-      fail(`attw failed (run: npx attw --pack . --profile ${profile})`);
+      fail(`attw failed (run: npx @arethetypeswrong/cli --pack . --profile ${profile})`);
     }
   }
 }

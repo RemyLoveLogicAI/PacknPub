@@ -8,8 +8,11 @@ import { unifiedDiff } from "./diff.js";
 import {
   readState,
   safeResolve,
+  rubyStringBody,
   sha256,
+  validatePackageName,
   validateSafeName,
+  validateVersion,
   writeState,
   type ManagedFileRecord,
 } from "./state.js";
@@ -184,6 +187,9 @@ export async function init(options: InitOptions): Promise<InitResult> {
   let binName: string;
   try {
     binName = validateSafeName("bin name", project.binName ?? unscopedName(project.name));
+    validatePackageName(project.name);
+    validateVersion(project.version);
+    validateSafeName("repo", repo);
   } catch (err) {
     throw new UsageError(err instanceof Error ? err.message : String(err));
   }
@@ -196,8 +202,8 @@ export async function init(options: InitOptions): Promise<InitResult> {
     VERSION: project.version,
     UNSCOPED: unscopedName(project.name),
     FORMULA_CLASS: formulaClassName(binName),
-    DESCRIPTION: String(project.pkg.description ?? `${binName} command-line tool`),
-    LICENSE: String(project.pkg.license ?? "MIT"),
+    DESCRIPTION: rubyStringBody(String(project.pkg.description ?? `${binName} command-line tool`)),
+    LICENSE: rubyStringBody(String(project.pkg.license ?? "MIT")),
   };
 
   const files: Array<{ to: string; from: string; mode?: number }> = [

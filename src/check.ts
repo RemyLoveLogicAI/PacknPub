@@ -26,9 +26,27 @@ export interface ConformanceReport {
   checks: ConformanceCheckResult[];
 }
 
-const SHA_PIN_RE = /uses:\s*([^\s#]+)@([0-9a-f]{40})\b/;
+const SHA_PIN_VALUE_RE = /^[^\s#@]+@[0-9a-f]{40}$/;
 const USES_LINE_RE = /^\s*(?:-\s*)?uses:\s*(.+)$/;
 const PUBLISH_JOB_NAMES = ["npm", "github-packages", "github-release", "homebrew"] as const;
+/** Steps that publish or push release output, used to find publish jobs whatever their ID. */
+const PUBLISH_BEHAVIOR_RE =
+  /\b(?:npm|pnpm|yarn(?:\s+npm)?)\s+publish\b|\bgh\s+release\s+(?:create|upload|edit)\b|\bgit\s+push\b|\bgh\s+pr\s+create\b|^\s+id-token:\s*write\b|^\s+packages:\s*write\b|^\s+contents:\s*write\b/m;
+
+/** The actual `uses:` value: strips a trailing YAML comment and surrounding quotes. */
+export function usesValue(raw: string): string {
+  let value = raw.replace(/\s+#.*$/, "").trim();
+  if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+    value = value.slice(1, -1).trim();
+  }
+  return value;
+}
+
+/** True when a job block requires the `release` environment (exact name, scalar or `name:` form). */
+export function requiresReleaseEnvironment(block: string): boolean {
+  if (/^\s+environment:\s*["']?release["']?\s*(?:#.*)?$/m.test(block)) return true;
+  return /^(\s+)environment:\s*(?:#.*)?\n\1\s+name:\s*["']?release["']?\s*(?:#.*)?$/m.test(block);
+}
 
 function parseJobBlocks(yaml: string): Record<string, string> {
   const lines = yaml.replace(/\r\n/g, "\n").split("\n");
@@ -60,16 +78,16 @@ function parseJobBlocks(yaml: string): Record<string, string> {
   return Object.fromEntries(Object.entries(jobs).map(([k, v]) => [k, v.join("\n")]));
 }
 
-function checkShaPinning(files: Array<{ rel: string; content: string }>): { ok: boolean; unpinned: string[] } {
+export function checkShaPinning(files: Array<{ rel: string; content: string }>): { ok: boolean; unpinned: string[] } {
   const unpinned: string[] = [];
   for (const file of files) {
     for (const line of file.content.replace(/\r\n/g, "\n").split("\n")) {
       const m = USES_LINE_RE.exec(line);
       if (!m) continue;
-      const raw = m[1].trim();
-      if (raw.startsWith("./") || raw.startsWith("../")) continue;
-      if (!SHA_PIN_RE.test(line)) {
-        unpinned.push(`${file.rel}: ${raw}`);
+      const value = usesValue(m[1]);
+      if (value.startsWith("./") || value.startsWith("../")) continue;
+      if (!SHA_PIN_VALUE_RE.test(value)) {
+        unpinned.push(`${file.rel}: ${value}`);
       }
     }
   }
@@ -89,6 +107,38 @@ function checkTopLevelPermissions(content: string): boolean {
     if (lines[i].trim()) block.push(lines[i].trim());
   }
   return block.length > 0 && block.every((entry) => entry.endsWith(": read") || entry.endsWith(": none"));
+}
+
+/** Job-level permission problems: `write-all`, or any `write` grant on a job not gated by `environment: release`. */
+export function checkJobPermissions(content: string): string[] {
+  const problems: string[] = [];
+  for (const [job, block] of Object.entries(parseJobBlocks(content))) {
+    const lines = block.split("\n");
+    const idx = lines.findIndex((l) => /^    permissions:/.test(l));
+    if (idx === -1) continue;
+    const head = lines[idx].replace(/\s+#.*$/, "").trim();
+    if (/^permissions:\s*["']?write-all["']?$/.test(head)) {
+      problems.push(`${job}: permissions: write-all`);
+      continue;
+    }
+    const writes: string[] = [];
+    if (head === "permissions:") {
+      for (let i = idx + 1; i < lines.length; i++) {
+        if (!/^      \S/.test(lines[i])) {
+          if (lines[i].trim() === "") continue;
+          break;
+        }
+        const entry = lines[i].replace(/\s+#.*$/, "").trim();
+        if (/:\s*["']?write["']?$/.test(entry)) writes.push(entry.split(":")[0]);
+      }
+    } else if (head !== "permissions: {}" && head !== "permissions: read-all") {
+      problems.push(`${job}: unrecognized permissions value "${head}"`);
+    }
+    if (writes.length && !requiresReleaseEnvironment(block)) {
+      problems.push(`${job}: ${writes.join(", ")} write without environment: release`);
+    }
+  }
+  return problems;
 }
 
 export function runConformanceCheck(cwd: string, options: { localOnly?: boolean } = {}): ConformanceReport {
@@ -219,11 +269,18 @@ export function runConformanceCheck(cwd: string, options: { localOnly?: boolean 
     push("workflow.least_privilege_permissions", "UNKNOWN", "no workflow files present to audit");
   } else {
     const bad = wfFiles.filter((f) => !checkTopLevelPermissions(f.content)).map((f) => f.rel);
+    const jobProblems = wfFiles.flatMap((f) => checkJobPermissions(f.content).map((p) => `${f.rel} ${p}`));
+    const ok = bad.length === 0 && jobProblems.length === 0;
+    const reasons: string[] = [];
+    if (bad.length) reasons.push(`over-permissive or missing top-level permissions: ${bad.join(", ")}`);
+    if (jobProblems.length) reasons.push(`over-permissive job permissions: ${jobProblems.join("; ")}`);
     push(
       "workflow.least_privilege_permissions",
-      bad.length === 0 ? "PASS" : "FAIL",
-      bad.length === 0 ? "all workflows declare least-privilege top-level permissions" : `over-permissive or missing top-level permissions: ${bad.join(", ")}`,
-      bad.length === 0 ? undefined : "Set top-level `permissions: {}` or `permissions: contents: read`."
+      ok ? "PASS" : "FAIL",
+      ok ? "all workflows declare least-privilege top-level and job permissions" : reasons.join("; "),
+      ok
+        ? undefined
+        : "Set top-level `permissions: {}` or `permissions: contents: read`; grant job-level `write` only to publish jobs gated by `environment: release`, never `write-all`."
     );
   }
 
@@ -232,8 +289,10 @@ export function runConformanceCheck(cwd: string, options: { localOnly?: boolean 
     push("workflow.human_approval_environment", "UNKNOWN", "release.yml missing");
   } else {
     const jobs = parseJobBlocks(relContent);
-    const presentPublishJobs = PUBLISH_JOB_NAMES.filter((name) => name in jobs);
-    const ungated = presentPublishJobs.filter((name) => !/^\s+environment:\s*release\b/m.test(jobs[name]));
+    const presentPublishJobs = Object.keys(jobs).filter(
+      (name) => (PUBLISH_JOB_NAMES as readonly string[]).includes(name) || PUBLISH_BEHAVIOR_RE.test(jobs[name])
+    );
+    const ungated = presentPublishJobs.filter((name) => !requiresReleaseEnvironment(jobs[name]));
     const ok = presentPublishJobs.length > 0 && ungated.length === 0;
     push(
       "workflow.human_approval_environment",
