@@ -5,6 +5,9 @@ coverage/
 .env*
 .DS_Store
 
+# PacknPub local state and upgrade backups (per-project; never ship)
+.packnpub/
+
 # Local agent / harness scratch (never ship)
 .crew-ledger/
 .cursor/

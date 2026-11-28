@@ -236,6 +236,23 @@
     .manifest li { grid-template-columns: 1fr; gap: 0.35rem; }
     header.hero { min-height: auto; padding-top: 2rem; }
   }
+  .motion-toggle {
+    appearance: none;
+    border: 1px solid var(--line);
+    background: rgba(244, 247, 250, 0.7);
+    color: var(--muted);
+    font: 500 0.78rem/1 "IBM Plex Mono", ui-monospace, monospace;
+    padding: 8px 12px;
+    cursor: pointer;
+    backdrop-filter: blur(6px);
+  }
+  .motion-toggle:hover { color: var(--ink); border-color: var(--ink); }
+  .motion-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  /* Pause only looping motion — leave one-shot .rise hero entrances alone */
+  html.motion-paused body::before,
+  html.motion-paused .cursor {
+    animation-play-state: paused !important;
+  }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
       animation: none !important;
@@ -250,7 +267,8 @@
       <h1 class="brand">Pack<em>n</em>Pub</h1>
       <p class="lede">One command turns any Node package into a production-grade release pipeline.</p>
       <div class="cta-row">
-        <button class="cta" type="button" id="copy-cmd" aria-label="Copy install command">Copy: npx packnpub init</button>
+        <button class="cta" type="button" id="copy-cmd">Copy: npx packnpub init</button>
+        <button class="motion-toggle" type="button" id="motion-toggle">Pause motion</button>
         <p class="ghost">or <a href="https://github.com/RemyLoveLogicAI/PacknPub">read the repo</a></p>
       </div>
       <div class="stage" aria-label="Live demo of packnpub init" aria-hidden="true">
@@ -307,11 +325,47 @@
       ];
 
       const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      async function play() {
-        if (reduce) {
-          demo.innerHTML = lines.map((l) => wrap(l)).join("\n");
-          return;
+      const motionBtn = document.getElementById("motion-toggle");
+      let motionPaused = false;
+      let typingStarted = false;
+
+      // APG action button: alternating Play/Pause label, no aria-pressed
+      function setMotionPaused(next) {
+        motionPaused = next;
+        document.documentElement.classList.toggle("motion-paused", next);
+        motionBtn.textContent = next ? "Play motion" : "Pause motion";
+      }
+
+      function wrap(line) {
+        if (!line.html) return "";
+        return line.className ? `<span class="${line.className}">${line.html}</span>` : line.html;
+      }
+      function strip(html) {
+        const el = document.createElement("div");
+        el.innerHTML = html;
+        return el.textContent || "";
+      }
+      function escape(s) {
+        return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      }
+      function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+      // Delay counts only active (unpaused) time — paused intervals do not consume remaining ms
+      async function wait(ms) {
+        let remaining = ms;
+        while (remaining > 0) {
+          if (motionPaused) {
+            await sleep(50);
+            continue;
+          }
+          const slice = Math.min(40, remaining);
+          await sleep(slice);
+          remaining -= slice;
         }
+      }
+
+      async function playTyping() {
+        if (typingStarted) return;
+        typingStarted = true;
         demo.innerHTML = '<span class="cursor"></span>';
         let body = "";
         for (const line of lines) {
@@ -328,20 +382,25 @@
           await wait(220);
         }
       }
-      function wrap(line) {
-        if (!line.html) return "";
-        return line.className ? `<span class="${line.className}">${line.html}</span>` : line.html;
+
+      function showStaticDemo() {
+        demo.innerHTML = lines.map((l) => wrap(l)).join("\n");
       }
-      function strip(html) {
-        const el = document.createElement("div");
-        el.innerHTML = html;
-        return el.textContent || "";
+
+      if (reduce) {
+        setMotionPaused(true);
+        showStaticDemo();
+      } else {
+        setMotionPaused(false);
+        playTyping();
       }
-      function escape(s) {
-        return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-      }
-      function wait(ms) { return new Promise((r) => setTimeout(r, ms)); }
-      play();
+
+      motionBtn.addEventListener("click", () => {
+        const next = !motionPaused;
+        setMotionPaused(next);
+        // Explicit Play opts in to typing even under prefers-reduced-motion
+        if (!next && !typingStarted) playTyping();
+      });
 
       const btn = document.getElementById("copy-cmd");
       const toast = document.getElementById("toast");

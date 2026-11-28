@@ -1,0 +1,280 @@
+{
+  "$schema": "./contract.schema.json",
+  "contractVersion": "1.0.0",
+  "templateVersion": "1.0.0",
+  "supportedEcosystems": [
+    {
+      "id": "node-npm",
+      "manifestFile": "package.json",
+      "runtimeRequirement": "Node.js >= 20",
+      "status": "supported"
+    },
+    {
+      "id": "homebrew-tap",
+      "manifestFile": "package.json",
+      "runtimeRequirement": "Homebrew (macOS/Linux) with npm tarball source",
+      "status": "supported"
+    }
+  ],
+  "nonGoals": [
+    {
+      "id": "pypi",
+      "reason": "Deliberate v1 non-goal. PacknPub v1 hardens Node.js + Homebrew end-to-end before adding multi-ecosystem manifest adapters.",
+      "errorCode": "UNSUPPORTED_ECOSYSTEM",
+      "revisitCriteria": "Requires owner approval and a separate adapter reading PEP 621 pyproject.toml, isolated sdist/wheel verification, and PyPI Trusted Publishers (OIDC) behind a human-approved GitHub Environment."
+    }
+  ],
+  "authoritativeManifests": {
+    "node-npm": {
+      "file": "package.json",
+      "requiredFields": [
+        "name",
+        "version",
+        "files",
+        "repository",
+        "engines"
+      ],
+      "derivedProperties": [
+        "version",
+        "bin",
+        "exports",
+        "files",
+        "repository",
+        "license",
+        "description"
+      ],
+      "forbiddenInTarball": [
+        ".env",
+        ".npmrc",
+        "id_rsa",
+        "*.pem",
+        "*.key",
+        "src/",
+        "tests/",
+        "test/",
+        "node_modules/",
+        ".github/"
+      ]
+    }
+  },
+  "supportedTargets": [
+    {
+      "id": "npm",
+      "requiresHumanApprovalEnvironment": true,
+      "approvalEnvironmentName": "release",
+      "authMechanism": "GitHub Actions OIDC Trusted Publishing with SLSA provenance (no static NPM_TOKEN)",
+      "dependsOnTargets": []
+    },
+    {
+      "id": "github-release",
+      "requiresHumanApprovalEnvironment": true,
+      "approvalEnvironmentName": "release",
+      "authMechanism": "Job-scoped GITHUB_TOKEN (contents: write)",
+      "dependsOnTargets": []
+    },
+    {
+      "id": "github-packages",
+      "requiresHumanApprovalEnvironment": true,
+      "approvalEnvironmentName": "release",
+      "authMechanism": "Job-scoped GITHUB_TOKEN (packages: write)",
+      "dependsOnTargets": []
+    },
+    {
+      "id": "homebrew",
+      "requiresHumanApprovalEnvironment": true,
+      "approvalEnvironmentName": "release",
+      "authMechanism": "PR-based bump via fine-grained HOMEBREW_TAP_TOKEN scoped to <owner>/homebrew-tap",
+      "dependsOnTargets": [
+        "npm"
+      ]
+    }
+  ],
+  "supportedOutputs": [
+    {
+      "pathPattern": ".github/workflows/ci.yml",
+      "managedBy": "packnpub-template",
+      "mode": "0644",
+      "conflictPolicy": "halt-with-diff"
+    },
+    {
+      "pathPattern": ".github/workflows/release.yml",
+      "managedBy": "packnpub-template",
+      "mode": "0644",
+      "conflictPolicy": "halt-with-diff"
+    },
+    {
+      "pathPattern": "scripts/verify-release.mjs",
+      "managedBy": "packnpub-template",
+      "mode": "0755",
+      "conflictPolicy": "halt-with-diff"
+    },
+    {
+      "pathPattern": "scripts/verify-release.sh",
+      "managedBy": "packnpub-template",
+      "mode": "0755",
+      "conflictPolicy": "halt-with-diff"
+    },
+    {
+      "pathPattern": "scripts/homebrew/<bin>.rb",
+      "managedBy": "packnpub-template",
+      "mode": "0644",
+      "conflictPolicy": "halt-with-diff"
+    },
+    {
+      "pathPattern": ".packnpub/state.json",
+      "managedBy": "packnpub-state",
+      "mode": "0644",
+      "conflictPolicy": "halt-with-diff"
+    }
+  ],
+  "pinnedActions": {
+    "actions/checkout": {
+      "sha": "11bd71901bbe5b1630ceea73d27597364c9af683",
+      "versionComment": "v4.2.2"
+    },
+    "actions/setup-node": {
+      "sha": "49933ea5288caeca8642d1e84afbd3f7d6820020",
+      "versionComment": "v4.4.0"
+    },
+    "actions/upload-artifact": {
+      "sha": "26f96dfa697d77e81fd5907df203aa23a56210a8",
+      "versionComment": "v4.3.0"
+    },
+    "actions/download-artifact": {
+      "sha": "fff8c148a8fdd56aa81fcb019f0b5f6c65700c4d",
+      "versionComment": "v4.3.0"
+    }
+  },
+  "checks": [
+    {
+      "id": "runtime.node_version",
+      "mandatory": true,
+      "scope": "local",
+      "description": "Node.js runtime satisfies >= 20."
+    },
+    {
+      "id": "manifest.authoritative",
+      "mandatory": true,
+      "scope": "local",
+      "description": "package.json exists and defines valid name, semver version, files allowlist, repository, and engines.node."
+    },
+    {
+      "id": "manifest.bin_shebang",
+      "mandatory": true,
+      "scope": "local",
+      "description": "Declared bin entrypoint exists, stays inside repo root, and starts with #!/usr/bin/env node."
+    },
+    {
+      "id": "manifest.version_consistency",
+      "mandatory": true,
+      "scope": "local",
+      "description": "Derived artifacts (seed Homebrew formula) match package.json version without drift."
+    },
+    {
+      "id": "workflow.files_present",
+      "mandatory": true,
+      "scope": "workflow",
+      "description": "CI workflow, release workflow, and verification script exist."
+    },
+    {
+      "id": "workflow.actions_sha_pinned",
+      "mandatory": true,
+      "scope": "workflow",
+      "description": "Every uses: reference in CI and release workflows is pinned to a 40-character commit SHA."
+    },
+    {
+      "id": "workflow.least_privilege_permissions",
+      "mandatory": true,
+      "scope": "workflow",
+      "description": "Top-level workflow permissions are read-only or empty; write/id-token scopes are job-scoped only."
+    },
+    {
+      "id": "workflow.human_approval_environment",
+      "mandatory": true,
+      "scope": "workflow",
+      "description": "Every publish job in release.yml declares environment: release."
+    },
+    {
+      "id": "workflow.artifact_checksum_verified",
+      "mandatory": true,
+      "scope": "workflow",
+      "description": "Publish jobs verify SHA256SUMS.txt before publishing downloaded artifacts and avoid direct expression injection in run blocks."
+    },
+    {
+      "id": "workflow.owner_resolved",
+      "mandatory": true,
+      "scope": "workflow",
+      "description": "Release workflow does not contain the OWNER placeholder."
+    },
+    {
+      "id": "state.template_drift",
+      "mandatory": false,
+      "scope": "local",
+      "description": "Tracked PacknPub files match .packnpub/state.json checksums and current contractVersion."
+    },
+    {
+      "id": "external.github_environment_reviewers",
+      "mandatory": true,
+      "scope": "external",
+      "description": "GitHub repository 'release' environment has Required Reviewers configured server-side (cannot be verified offline)."
+    },
+    {
+      "id": "external.ci_run_verified",
+      "mandatory": false,
+      "scope": "external",
+      "description": "Remote GitHub Actions CI workflow has executed and passed on HEAD."
+    }
+  ],
+  "gateSemantics": {
+    "passRule": "PASS requires every mandatory check in scope to report PASS.",
+    "failRule": "FAIL if any mandatory check reports FAIL.",
+    "holdRule": "HOLD if zero mandatory checks report FAIL and one or more mandatory checks report UNKNOWN.",
+    "publishAuthorization": "A PASS conformance verdict NEVER authorizes registry publication, tagging, or external permission changes.",
+    "exitCodes": {
+      "PASS": 0,
+      "FAIL": 1,
+      "HOLD": 2,
+      "USAGE_ERROR": 2
+    }
+  },
+  "threatModel": [
+    {
+      "id": "TM-01",
+      "threat": "Mutable GitHub Action tag hijacking (@v4 repointed to malicious commit)",
+      "mitigation": "Pin every action to an immutable 40-character commit SHA with a version comment.",
+      "verification": "workflow.actions_sha_pinned check + policy mutation test"
+    },
+    {
+      "id": "TM-02",
+      "threat": "Unapproved publish via tag push or bypassing npm job via --targets",
+      "mitigation": "Attach environment: release to every publish job (npm, github-packages, github-release, homebrew) and require GitHub Environment Required Reviewers + tag rulesets.",
+      "verification": "workflow.human_approval_environment check + policy mutation test"
+    },
+    {
+      "id": "TM-03",
+      "threat": "Shell expression injection or unverified artifact tampering between verify and publish jobs",
+      "mitigation": "Pass job outputs through env: variables (never inline ${{ ... }} in run:) and verify sha256sum -c SHA256SUMS.txt before publishing.",
+      "verification": "workflow.artifact_checksum_verified check + policy mutation test"
+    },
+    {
+      "id": "TM-04",
+      "threat": "Silent overwrite of existing repository customizations or path traversal via crafted bin name",
+      "mitigation": "Three-way hash conflict detection against .packnpub/state.json, unified diff preview, hard-stop on conflicts, and strict root path confinement.",
+      "verification": "Conflicting & invalid fixture suite + path-traversal unit tests"
+    },
+    {
+      "id": "TM-05",
+      "threat": "Static secret leakage via long-lived NPM_TOKEN or direct push to homebrew-tap main",
+      "mitigation": "Use OIDC Trusted Publishing with SLSA provenance for npm, persist-credentials: false on read-only checkouts, and PR-based Homebrew tap updates.",
+      "verification": "Workflow static policy checks + security review"
+    }
+  ],
+  "compatibility": {
+    "minimumNodeVersion": "20.0.0",
+    "migratesFrom": [
+      "unversioned-0.1.0",
+      "unversioned-2.0.0"
+    ],
+    "breakingChangePolicy": "Contract major increments require documented migration path, dry-run diff preview, conflict hard-stop, and atomic rollback."
+  }
+}

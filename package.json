@@ -37,7 +37,9 @@
     "templates",
     "README.md",
     "LICENSE",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "contracts",
+    "docs"
   ],
   "engines": {
     "node": ">=20"

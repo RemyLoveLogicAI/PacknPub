@@ -22,10 +22,12 @@ Use an existing trusted `packnpub` executable, or the project's local CLI when a
 packnpub init --yes --owner <owner> --targets <targets> --dry-run --json
 packnpub init --yes --owner <owner> --targets <targets>
 # init prints a doctor scorecard; re-check or machine-read with:
+packnpub check --local-only --json
 packnpub doctor --json
+packnpub diff
 ```
 
-Select only intended targets from `npm,github-release,github-packages,homebrew`; `homebrew` requires `npm`. `init` normally adds CI, a tag-triggered release workflow and `scripts/verify-release.sh`, plus a Homebrew formula only when selected. Existing files are skipped unless `--force`; do not use `--force` without a concrete, reviewed reason.
+Select only intended targets from `npm,github-release,github-packages,homebrew`; `homebrew` requires `npm`. `init` normally adds CI, a tag-triggered release workflow, `scripts/verify-release.mjs` (plus a legacy `.sh`), `.packnpub/state.json`, and a Homebrew formula only when selected. Existing files are skipped unless `--force`; do not use `--force` without a concrete, reviewed reason.
 
 The current generator fills absent manifest fields, including a default `files` whitelist of `bin`, `dist`, `README.md`, `LICENSE`, Node `>=20`, and `publishConfig` with public access. These defaults can be wrong for the target. Set intentional fields first and review the dry run, generated workflow and exact package contents; do not imply that a private repo is safe to publish because a pipeline exists. The generated release workflow can publish selected targets when a matching version tag is pushed.
 
